@@ -35,6 +35,7 @@ const Selectors = require('../src/shared/selectors.js');
 const Collapse = require('../src/content/collapse-manager.js');
 const Nav = require('../src/content/strip-navigator.js');
 const Early = require('../src/content/early-boot.js');
+const TokenTracker = require('../src/content/token-tracker.js');
 
 // ---------- settings ----------
 check('settings: contentWidth defaults, fullWidth & DEFAULT_TYPOGRAPHY_RESET', () => {
@@ -49,8 +50,10 @@ check('settings: contentWidth defaults, fullWidth & DEFAULT_TYPOGRAPHY_RESET', (
     fullWidth: true, contentWidth: 100, fontFamily: 'default', fontSize: null, lineHeight: null, paragraphGap: null, letterSpacing: null
   });
   assert.deepEqual(Settings.DEFAULT_SETTINGS, {
-    autoCollapse: true, openPastChats: 4, hideSources: true, textOpt: Settings.DEFAULT_TEXT_OPT
+    autoCollapse: true, openPastChats: 4, hideSources: true, showTokenUsage: true, textOpt: Settings.DEFAULT_TEXT_OPT
   });
+  assert.equal(Settings.normalizeSettings({ showTokenUsage: false }).showTokenUsage, false);
+  assert.equal(Settings.normalizeSettings({ showTokenUsage: 'no' }).showTokenUsage, true);
   assert.equal(Settings.resolveLightRenderActive, undefined);
   assert.equal(Settings.OPEN_TURN_LIMITS, undefined);
 });
@@ -469,6 +472,7 @@ check('manifest: every referenced file exists; ui-overlay at document_start', ()
   const end = manifest.content_scripts.find((c) => c.run_at === 'document_end');
   assert.ok(end && Array.isArray(end.js));
   assert.equal(end.js[end.js.length - 1], 'src/content/main.js');
+  assert.equal(end.js[end.js.length - 2], 'src/content/token-tracker.js');
 });
 
 // ---------- icons ----------
@@ -540,6 +544,7 @@ check('guardrails: popup English UI, crisp logo, contentWidth slider, no preview
   assert.ok(/id="openPastChats"[^>]*type="number"|type="number"[^>]*id="openPastChats"/.test(popupHtml));
   assert.ok(popupHtml.includes('id="openPastDec"') && popupHtml.includes('id="openPastInc"'));
   assert.ok(popupHtml.includes('id="openPastChats-wrap"') && popupHtml.includes('acc-collapse'));
+  assert.ok(popupHtml.includes('id="showTokenUsage"') && popupHtml.includes('Token Usage'));
   assert.ok(popupHtml.includes('id="textFullWidth"') && popupHtml.includes('Full Width'));
   assert.ok(popupHtml.includes('id="contentWidth-wrap"') && popupHtml.includes('id="contentWidth"') && popupHtml.includes('min="60" max="100"'));
   assert.ok(popupHtml.includes('id="textOpt-panel"') && popupHtml.includes('id="resetTextOpt"') && popupHtml.includes('Reset Typography'));
@@ -747,10 +752,310 @@ check('collapse & stages 2-3: deferMediaInTurn lazy/async idempotency, cold-load
   assert.ok(main.includes('requestIdleCallback') && main.includes('writeEarlyMirror') && main.includes('refreshRaf'));
 });
 
+// ---------- token-tracker (auto plan, estimator, rolling 24h/7d quota & bar/tooltip contracts) ----------
+check('token-tracker: estimateTokens, formatCompactTokens & formatCountdown', () => {
+  assert.equal(TokenTracker.estimateTokens(''), 0);
+  assert.equal(TokenTracker.estimateTokens('   \n\t '), 0);
+  assert.equal(TokenTracker.estimateTokens(null), 0);
+  const prose = TokenTracker.estimateTokens('Hello world this is a simple English sentence.');
+  const code = TokenTracker.estimateTokens('function f(a, b) { return a.map((x) => x + b[0]); }');
+  const cjk = TokenTracker.estimateTokens('\u4eca\u65e5\u306f\u826f\u3044\u5929\u6c17\u3067\u3059');
+  assert.ok(prose >= 8 && prose <= 16, 'prose estimate reasonable: ' + prose);
+  assert.ok(code >= 12 && code <= 32, 'code estimate reasonable: ' + code);
+  assert.ok(cjk >= 10, 'CJK estimate > char count: ' + cjk);
+
+  assert.equal(TokenTracker.formatCompactTokens(450), '450');
+  assert.equal(TokenTracker.formatCompactTokens(12400), '12.4k');
+  assert.equal(TokenTracker.formatCompactTokens(128000), '128k');
+  assert.equal(TokenTracker.formatCompactTokens(1000000), '1M');
+  assert.equal(TokenTracker.formatCountdown(0), '');
+  assert.equal(TokenTracker.formatCountdown(5 * 60000), '5m');
+  assert.equal(TokenTracker.formatCountdown((23 * 60 + 15) * 60000), '23h 15m');
+  assert.equal(TokenTracker.formatCountdown((6 * 24 + 23) * 3600000), '6d 23h');
+});
+
+check('token-tracker: bilingual plan badge, model tier, weight & resolvePlan priority', () => {
+  assert.equal(TokenTracker.classifyPlanText('AI Ultra'), 'ultra');
+  assert.equal(TokenTracker.classifyPlanText('AI Pro'), 'pro');
+  assert.equal(TokenTracker.classifyPlanText('Gemini Advanced'), 'pro');
+  assert.equal(TokenTracker.classifyPlanText('AI Plus'), 'plus');
+  assert.equal(TokenTracker.classifyPlanText('Upgrade to Gemini Advanced'), 'free');
+  assert.equal(TokenTracker.classifyPlanText('Tingkatkan ke Gemini'), 'free');
+  assert.equal(TokenTracker.classifyPlanText('Unrelated button'), null);
+
+  assert.equal(TokenTracker.classifyModelTierText('2.5 Pro'), 'pro');
+  assert.equal(TokenTracker.classifyModelTierText('3 Pro Thinking'), 'pro');
+  assert.equal(TokenTracker.classifyModelTierText('Hydrogen Tinggi'), 'pro');
+  assert.equal(TokenTracker.classifyModelTierText('Neon High'), 'pro');
+  assert.equal(TokenTracker.classifyModelTierText('Argon'), 'pro');
+  assert.equal(TokenTracker.classifyModelTierText('Tinggi'), 'pro');
+  assert.equal(TokenTracker.classifyModelTierText('Deep Research'), 'pro');
+  assert.equal(TokenTracker.classifyModelTierText('2.5 Flash'), 'free');
+  assert.equal(TokenTracker.detectModelWeight('Deep Research'), 3.0);
+  assert.equal(TokenTracker.detectModelWeight('Hydrogen Tinggi'), 1.6);
+  assert.equal(TokenTracker.detectModelWeight('Thinking'), 1.6);
+  assert.equal(TokenTracker.detectModelWeight('Fast'), 1.0);
+  assert.equal(TokenTracker.classifyPlanText('Pro'), 'pro');
+
+  assert.deepEqual(TokenTracker.resolvePlan({ badgePlan: 'ultra', modelPlan: 'free', storedPlan: 'free' }), { plan: 'ultra', confidence: 'high' });
+  assert.deepEqual(TokenTracker.resolvePlan({ badgePlan: null, modelPlan: 'free', storedPlan: 'pro' }), { plan: 'pro', confidence: 'stored' });
+  assert.deepEqual(TokenTracker.resolvePlan({ badgePlan: null, modelPlan: 'pro', storedPlan: 'free' }), { plan: 'pro', confidence: 'model' });
+  assert.deepEqual(TokenTracker.resolvePlan({ badgePlan: null, modelPlan: null, storedPlan: null }), { plan: 'free', confidence: 'default' });
+});
+
+check('token-tracker: anti-double-count hydration, new-chat Turn #1, rolling 24h/7d expiry & LRU cap', () => {
+  const t0 = 1_700_000_000_000;
+  let store = TokenTracker.normalizeUsageStore(null, t0);
+  // Existing populated chat hydration charges 0.
+  const rHydrate = TokenTracker.recordConversationUsage(store, {
+    convId: 'oldChat1', turnCount: 12, chatTokens: 8000, modelWeight: 1.6, isHydrated: false, now: t0, plan: 'pro', planConfidence: 'high'
+  });
+  store = rHydrate.store;
+  assert.equal(rHydrate.deltaTokens, 0);
+  assert.equal(rHydrate.chargedUnits, 0);
+  assert.equal(store.dailyUsed, 0);
+  assert.equal(store.conversations.oldChat1.maxTokens, 8000);
+
+  // Follow-up turn charges delta weighted compute units.
+  const rNext = TokenTracker.recordConversationUsage(store, {
+    convId: 'oldChat1', turnCount: 13, chatTokens: 9000, modelWeight: 1.6, isHydrated: true, now: t0 + 5000
+  });
+  store = rNext.store;
+  assert.equal(rNext.deltaTokens, 1000);
+  assert.equal(rNext.chargedUnits, Math.round((9000 + 1000 * 2) * 1.6));
+  assert.equal(store.dailyUsed, rNext.chargedUnits);
+  assert.equal(store.weeklyUsed, rNext.chargedUnits);
+
+  // Brand-new chat pre-seeded at 0 during streaming properly charges Turn #1 once finished.
+  const rSeed = TokenTracker.recordConversationUsage(store, {
+    convId: 'newChat1', turnCount: 0, chatTokens: 0, modelWeight: 1.0, isHydrated: true, now: t0 + 6000
+  });
+  store = rSeed.store;
+  const rTurn1 = TokenTracker.recordConversationUsage(store, {
+    convId: 'newChat1', turnCount: 1, chatTokens: 500, modelWeight: 1.0, isHydrated: true, now: t0 + 9000
+  });
+  store = rTurn1.store;
+  assert.equal(rTurn1.deltaTokens, 500);
+  assert.equal(rTurn1.chargedUnits, 1500);
+
+  // 24h rolling daily resets while 7d weekly persists until +7d.
+  const afterDay = TokenTracker.normalizeUsageStore(store, t0 + 5000 + TokenTracker.DAY_MS);
+  assert.equal(afterDay.dailyUsed, 0);
+  assert.equal(afterDay.dailyStart, 0);
+  assert.ok(afterDay.weeklyUsed > 0);
+  const afterWeek = TokenTracker.normalizeUsageStore(afterDay, t0 + 5000 + TokenTracker.WEEK_MS);
+  assert.equal(afterWeek.weeklyUsed, 0);
+  assert.equal(afterWeek.weeklyStart, 0);
+
+  // LRU conversation cap (200 entries).
+  const many = {};
+  for (let i = 0; i < 210; i++) many['c' + i] = { maxTokens: 100, turnCount: 1, updatedAt: t0 + i };
+  const pruned = TokenTracker.normalizeUsageStore({ conversations: many }, t0 + 500);
+  assert.equal(Object.keys(pruned.conversations).length, TokenTracker.MAX_CONV_ENTRIES);
+  assert.ok(!('c0' in pruned.conversations) && 'c209' in pruned.conversations);
+});
+
+check('token-tracker: snapshot thresholds, limit banner, selectors & CSS/main contracts', () => {
+  assert.equal(TokenTracker.computeTierLevel(0.50), 'normal');
+  assert.equal(TokenTracker.computeTierLevel(0.51), 'warn');
+  assert.equal(TokenTracker.computeTierLevel(0.80), 'warn');
+  assert.equal(TokenTracker.computeTierLevel(0.81), 'crit');
+  assert.equal(TokenTracker.computeRemainingLevel(50), 'normal');
+  assert.equal(TokenTracker.computeRemainingLevel(49), 'warn');
+  assert.equal(TokenTracker.computeRemainingLevel(20), 'warn');
+  assert.equal(TokenTracker.computeRemainingLevel(19), 'crit');
+
+  assert.equal(TokenTracker.detectLimitBannerText('Normal chat text about limits'), null);
+  assert.deepEqual(TokenTracker.detectLimitBannerText('You reached your daily quota limit. Try again in 2 hrs.'), { scope: 'daily', resetHint: '2 hrs' });
+  assert.deepEqual(TokenTracker.detectLimitBannerText('Weekly limit reached until 09:30 AM'), { scope: 'weekly', resetHint: '09:30 AM' });
+
+  const now = 1_700_000_000_000;
+  const idleSnap = TokenTracker.computeQuotaSnapshot(null, { plan: 'pro', inputTokens: 4100, outputTokens: 8100, draftTokens: 200, hasMedia: true, now });
+  assert.equal(idleSnap.ctxText, '~12.4k / 1M (1.2%)');
+  assert.equal(idleSnap.dailyText, 'Day 100% left');
+  assert.equal(idleSnap.weeklyText, 'Week 100% left');
+  assert.equal(idleSnap.planBadgeText, 'AI Pro \u00b7 1M');
+  assert.equal(idleSnap.footerText, 'Estimated locally for AI Pro (this browser)');
+
+  const hitSnap = TokenTracker.computeQuotaSnapshot({ dailyUsed: 1000, dailyStart: now - 1000, weeklyUsed: 1000, weeklyStart: now - 1000 }, {
+    plan: 'free', inputTokens: 1000, outputTokens: 0, draftTokens: 0,
+    limitBanner: { scope: 'daily', resetHint: '1h' }, now
+  });
+  assert.equal(hitSnap.dailyLeftPct, 0);
+  assert.equal(hitSnap.dailyLevel, 'crit');
+
+  assert.equal(typeof Selectors.findComposerInput, 'function');
+  assert.equal(typeof Selectors.findDisclaimer, 'function');
+  assert.equal(typeof Selectors.isVisible, 'function');
+  assert.ok(Array.isArray(Selectors.SEL.disclaimer) && Selectors.SEL.disclaimer.includes('.disclaimer-container'));
+  assert.ok(Array.isArray(Selectors.SEL.planBadge));
+
+  // findDisclaimer finds sibling disclaimer outside input-area-v2 while skipping chat-history prose
+  const stamped = [];
+  const mkDiscNode = (text, opts = {}) => ({
+    textContent: text,
+    attrs: {},
+    setAttribute(k, v) { this.attrs[k] = v; stamped.push(this); },
+    closest: (s) => (opts.inChat && s.includes('.chat-history') ? {} : null),
+    querySelector: () => null
+  });
+  const chatDisc = mkDiscNode('Gemini adalah AI dan dapat membuat kesalahan.', { inChat: true });
+  const realDisc = mkDiscNode('Gemini adalah AI dan dapat membuat kesalahan.');
+  const mockDiscDoc = {
+    querySelector: (s) => (s === '.bottom-container' ? { querySelectorAll: () => [chatDisc, realDisc] } : null),
+    querySelectorAll: () => []
+  };
+  const foundDisc = Selectors.findDisclaimer(mockDiscDoc);
+  assert.equal(foundDisc, realDisc);
+  assert.equal(realDisc.attrs['data-gopt-disclaimer'], '1');
+  assert.equal(chatDisc.attrs['data-gopt-disclaimer'], undefined);
+
+  assert.ok(overlay.includes('--gopt-warn') && overlay.includes('--gopt-crit'));
+  assert.ok(/html\.gopt-active\.gopt-token-bar-active/.test(overlay) && /visibility:\s*hidden !important/.test(overlay));
+  assert.ok(overlay.includes('.disclaimer-container'));
+  assert.ok(/\.gopt-token-bar\s*\{[^}]*bottom:\s*4px;[^}]*z-index:\s*2147482900;/s.test(overlay));
+  assert.ok(/\.gopt-tk-fill\s*\{/.test(overlay) && /\.gopt-token-tooltip\s*\{/.test(overlay));
+
+  const tkSrc = read('src', 'content', 'token-tracker.js');
+  assert.ok(tkSrc.includes("style.bottom = bottomPx + 'px'") && !tkSrc.includes('= cr.bottom - barH'));
+  assert.ok(tkSrc.includes("addEventListener('resize', schedulePlace") && tkSrc.includes("removeEventListener('resize', schedulePlace"));
+  assert.ok(tkSrc.includes('Svc.SEL.sidenav'));
+
+  const main = read('src', 'content', 'main.js');
+  assert.ok(main.includes('GeminiOptTokenTracker') && main.includes('TokenTracker.mount(document)'));
+  assert.ok(main.includes('TokenTracker.resetRoute()') && main.includes('TokenTracker.destroy()'));
+  assert.ok(main.includes('TokenTracker.startSmoothTrack('));
+});
+
+check('token-tracker: end-to-end mount + update against real Selectors renders visible bottom bar', () => {
+  const prevSel = globalThis.GeminiOptSelectors;
+  const prevRaf = globalThis.requestAnimationFrame;
+  const prevCancelRaf = globalThis.cancelAnimationFrame;
+  const prevW = globalThis.innerWidth;
+  const prevH = globalThis.innerHeight;
+  const prevAdd = globalThis.addEventListener;
+  const prevRem = globalThis.removeEventListener;
+
+  function mkClassList() {
+    const set = new Set();
+    return {
+      add: (...c) => c.forEach((x) => set.add(x)),
+      remove: (...c) => c.forEach((x) => set.delete(x)),
+      contains: (c) => set.has(c),
+      toggle: (c, on) => {
+        const next = on === undefined ? !set.has(c) : !!on;
+        if (next) set.add(c); else set.delete(c);
+        return next;
+      }
+    };
+  }
+  function mkEl(tag) {
+    const attrs = {};
+    const children = [];
+    return {
+      tagName: tag.toUpperCase(),
+      id: '',
+      className: '',
+      classList: mkClassList(),
+      style: {},
+      textContent: '',
+      hidden: false,
+      children,
+      appendChild(c) { children.push(c); return c; },
+      setAttribute(k, v) { attrs[k] = String(v); },
+      getAttribute: (k) => (k in attrs ? attrs[k] : null),
+      addEventListener() {},
+      removeEventListener() {},
+      remove() {},
+      getBoundingClientRect: () => ({ left: 200, top: 770, width: 700, height: 22, bottom: 792 })
+    };
+  }
+
+  const bodyChildren = [];
+  const modelBtn = { textContent: 'Hydrogen Tinggi', getClientRects: () => [{}], getAttribute: () => null };
+  const sidenavPro = { textContent: 'Pro', childElementCount: 0, closest: () => null };
+  const disclaimerEl = {
+    textContent: 'Gemini adalah AI dan dapat membuat kesalahan.',
+    attrs: {},
+    setAttribute(k, v) { this.attrs[k] = v; },
+    closest: () => null,
+    querySelector: () => null,
+    getBoundingClientRect: () => ({ left: 300, top: 772, width: 500, height: 18, bottom: 790 })
+  };
+  const composerBox = { getBoundingClientRect: () => ({ left: 260, top: 700, width: 731, height: 56, bottom: 756 }) };
+  const composerAnchor = {
+    querySelector: (s) => (s.includes('rich-textarea') ? composerBox : null),
+    getBoundingClientRect: () => ({ left: 216, top: 700, width: 849, height: 56, bottom: 756 })
+  };
+  const mockDoc = {
+    documentElement: { classList: mkClassList() },
+    body: { appendChild: (el) => { bodyChildren.push(el); return el; } },
+    createElement: (tag) => mkEl(tag),
+    querySelector: (s) => {
+      if (s === 'input-area-v2') return composerAnchor;
+      if (s === 'bard-sidenav') return { querySelectorAll: () => [sidenavPro] };
+      if (s === '.bottom-container') return { querySelectorAll: () => [disclaimerEl] };
+      return null;
+    },
+    querySelectorAll: (s) => {
+      if (s === '[data-test-id="bard-mode-menu-button"]') return [modelBtn];
+      return [];
+    }
+  };
+  const turnEl = {
+    querySelector: (s) => {
+      if (s === 'user-query') return { textContent: 'Jelaskan cara kerja baterai lithium ion modern' };
+      if (s === 'model-response') return { textContent: 'Baterai lithium-ion bekerja dengan memindahkan ion litium antara katoda dan anoda melalui elektrolit.' };
+      return null;
+    }
+  };
+
+  try {
+    globalThis.GeminiOptSelectors = Selectors;
+    globalThis.requestAnimationFrame = (fn) => { fn(); return 1; };
+    globalThis.cancelAnimationFrame = () => {};
+    globalThis.innerWidth = 1280;
+    globalThis.innerHeight = 800;
+    globalThis.addEventListener = () => {};
+    globalThis.removeEventListener = () => {};
+
+    TokenTracker.setEnabled(true);
+    TokenTracker.mount(mockDoc);
+    TokenTracker.update({
+      turns: [turnEl],
+      streaming: false,
+      wasStreaming: false,
+      url: 'https://gemini.google.com/app/test123',
+      doc: mockDoc
+    });
+
+    const bar = bodyChildren.find((n) => n.className === 'gopt-token-bar');
+    assert.ok(bar, 'bar mounted in document.body');
+    assert.ok(bar.classList.contains('is-visible'), 'bar must become visible');
+    assert.ok(mockDoc.documentElement.classList.contains('gopt-token-bar-active'), 'html flag active');
+    assert.equal(disclaimerEl.attrs['data-gopt-disclaimer'], '1', 'disclaimer stamped');
+    assert.equal(bar.style.left, '260px');
+    assert.equal(bar.style.width, '731px');
+    assert.equal(bar.style.bottom, '8px');
+    assert.equal(bar.style.top, '');
+    const ctxSpan = bar.children.find((c) => c.className === 'gopt-tk-ctx');
+    assert.ok(ctxSpan && ctxSpan.textContent.includes('/ 1M'), 'auto-detected AI Pro 1M cap: ' + (ctxSpan && ctxSpan.textContent));
+    TokenTracker.destroy();
+  } finally {
+    globalThis.GeminiOptSelectors = prevSel;
+    globalThis.requestAnimationFrame = prevRaf;
+    globalThis.cancelAnimationFrame = prevCancelRaf;
+    globalThis.innerWidth = prevW;
+    globalThis.innerHeight = prevH;
+    globalThis.addEventListener = prevAdd;
+    globalThis.removeEventListener = prevRem;
+  }
+});
+
 // ---------- syntax ----------
 check('syntax: node --check on every src/**/*.js', () => {
   const files = walk(p('src'), '.js');
-  assert.ok(files.length >= 7, 'expected >= 7 js files, got ' + files.length);
+  assert.ok(files.length >= 8, 'expected >= 8 js files, got ' + files.length);
   for (const f of files) {
     const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
     assert.equal(r.status, 0, path.relative(ROOT, f) + ': ' + r.stderr);

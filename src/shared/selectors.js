@@ -22,6 +22,19 @@
     mainArea: ['main', 'chat-window', '.chat-container'],
     sidenav: ['bard-sidenav', 'side-navigation-v2', 'mat-sidenav', 'nav[role="navigation"]'],
     composerAnchor: ['input-area-v2', '.input-area-container', '.bottom-container', 'main form', 'rich-textarea'],
+    composerInput: ['rich-textarea [contenteditable="true"]', '.text-input-field [contenteditable="true"]',
+      'rich-textarea textarea', '.ql-editor[contenteditable="true"]', 'div[role="textbox"][contenteditable="true"]'],
+    disclaimer: ['hallucination-disclaimer', '.hallucination-disclaimer', '[data-test-id="disclaimer"]',
+      'footer .disclaimer', '.bottom-container .disclaimer-container', '.disclaimer-container', '.disclaimer-text'],
+    planBadge: ['[data-test-id*="pillbox" i]', '[data-test-id*="subscription" i]', '[data-test-id*="tier" i]',
+      'header [aria-label*="Gemini Advanced" i]', 'header [aria-label*="AI Ultra" i]',
+      'header [aria-label*="AI Pro" i]', 'header [aria-label*="AI Plus" i]',
+      '.bard-logo-container', 'a[href*="one.google.com"]', 'button[aria-label*="Upgrade" i]',
+      'button[aria-label*="Tingkatkan" i]'],
+    modelSelector: ['[data-test-id="bard-mode-menu-button"]', 'bard-mode-switcher button',
+      '[data-test-id*="model-selector" i]', 'input-area-v2 button[aria-haspopup="menu"]',
+      '.input-area-container button[aria-haspopup="menu"]'],
+    limitBanner: ['[data-test-id*="quota" i]', '[data-test-id*="limit" i]', 'snack-bar-container', '[role="alert"]'],
     nativeScrollDown: ['button.scroll-to-bottom-button', 'button[aria-label*="scroll to bottom" i]',
       'button[aria-label*="ke bawah" i]:not(.gopt-scroll-bottom-btn)', '[data-test-id="scroll-to-bottom"]'],
     a11yHidden: ['.cdk-visually-hidden', '[aria-hidden="true"]', '.sr-only', '.visually-hidden'],
@@ -83,9 +96,42 @@
     return findChatScroller(d) || queryFirst(d, SEL.mainArea);
   }
 
+  const DISCLAIMER_RE = /(gemini.*(mistake|kesalahan|double-check|periksa kembali|inaccurate|tidak akurat))/i;
+
   function findComposerAnchor(doc) {
     const d = doc || root.document;
     return d ? queryFirst(d, SEL.composerAnchor) : null;
+  }
+
+  function findComposerInput(doc) {
+    const d = doc || root.document;
+    return d ? queryFirst(d, SEL.composerInput) : null;
+  }
+
+  function findDisclaimer(doc) {
+    const d = doc || root.document;
+    if (!d) return null;
+    const directAll = queryAll(d, SEL.disclaimer);
+    for (const el of directAll) {
+      if (el.closest && el.closest('infinite-scroller, .chat-history, model-response, user-query, [data-gopt-owned]')) continue;
+      if (el.setAttribute) el.setAttribute('data-gopt-disclaimer', '1');
+      return el;
+    }
+    const scope = queryFirst(d, ['input-container', '.bottom-container', 'chat-window', 'bard-sidenav-content', 'main']) || d.body;
+    if (!scope || !scope.querySelectorAll) return null;
+    let nodes;
+    try { nodes = scope.querySelectorAll('div, span, p, small'); } catch (_) { return null; }
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const el = nodes[i];
+      if (el.closest && el.closest('infinite-scroller, .chat-history, model-response, user-query, rich-textarea, [data-gopt-owned], button, [role="button"], [contenteditable="true"]')) continue;
+      if (el.querySelector && el.querySelector('rich-textarea, textarea, input, button, [contenteditable="true"]')) continue;
+      const txt = (el.textContent || '').trim();
+      if (txt && txt.length <= 220 && DISCLAIMER_RE.test(txt)) {
+        if (el.setAttribute) el.setAttribute('data-gopt-disclaimer', '1');
+        return el;
+      }
+    }
+    return null;
   }
 
   function getTurns(rootEl) {
@@ -298,6 +344,7 @@
 
   return Object.freeze({
     SEL, queryFirst, queryAll, findChatScroller, findMainArea, findComposerAnchor,
+    findComposerInput, findDisclaimer, isVisible,
     getTurns, getTurnId, dedupePromptText, getPromptText,
     isTurnStreaming, detectTheme, isProtected, hasProtectedDescendant, tagDynamicAttributionNodes
   });

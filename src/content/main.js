@@ -8,6 +8,7 @@
   const Selectors = window.GeminiOptSelectors;
   const Collapse = window.GeminiOptCollapse;
   const Navigator = window.GeminiOptNavigator;
+  const TokenTracker = window.GeminiOptTokenTracker;
   const Early = window.GeminiOptEarly;
   if (!Settings || !Selectors || !Collapse || !Navigator) {
     window.__goptBooted = false;
@@ -330,6 +331,15 @@
     state.streaming = lastIdx >= 0 && Selectors.isTurnStreaming(turns[lastIdx], true, document);
     const states = Collapse.sync(turns, state.settings, { streamingIndex: state.streaming ? lastIdx : -1 });
     Navigator.update(turns, states);
+    if (TokenTracker) {
+      TokenTracker.update({
+        turns: turns,
+        streaming: state.streaming,
+        wasStreaming: wasStreaming,
+        url: location.href,
+        doc: document
+      });
+    }
 
     if (state.settings.hideSources) {
       const finishedStreaming = wasStreaming && !state.streaming && lastIdx >= 0;
@@ -433,6 +443,9 @@
       state.chatRoot = null;
       attachScrollBtnObservers();
       scheduleScrollBtnUpdate();
+      if (TokenTracker) {
+        TokenTracker.update({ turns: [], streaming: false, wasStreaming: false, url: location.href, doc: document });
+      }
       state.bodyObserver = new MutationObserver(function () {
         if (Selectors.findChatScroller(document)) attachToChat();
       });
@@ -464,6 +477,7 @@
     toggle('gopt-has-scroll-bottom', false);
     Collapse.reset();
     Navigator.reset();
+    if (TokenTracker) TokenTracker.resetRoute();
     attachToChat();
   }
 
@@ -507,6 +521,7 @@
     if (state.scrollBtnTrackRaf) { cancelAnimationFrame(state.scrollBtnTrackRaf); state.scrollBtnTrackRaf = 0; }
     Collapse.reset();
     Navigator.destroy();
+    if (TokenTracker) TokenTracker.destroy();
   }
 
   // ---------- actions ----------
@@ -584,6 +599,10 @@
     syncEarlyMirror();
     applyRootClasses();
     Navigator.mount(document);
+    if (TokenTracker) {
+      TokenTracker.setEnabled(state.settings.showTokenUsage !== false);
+      TokenTracker.mount(document);
+    }
     Navigator.onNavigate(goToTurn);
     Collapse.onStateChange(syncAfterCollapseChange);
     ensureScrollBtn();
@@ -609,12 +628,14 @@
       state.settings = next;
       syncEarlyMirror();
       applyRootClasses();
+      if (TokenTracker) TokenTracker.setEnabled(next.showTokenUsage !== false);
       refreshNow();
       if (fullChanged) {
         if (animOk()) {
           Navigator.startSmoothTrack(280);
           Collapse.startStickyTrack(280);
           startScrollBtnTrack(280);
+          if (TokenTracker) TokenTracker.startSmoothTrack(280);
         }
         scheduleScrollBtnUpdate();
       } else if (widthChanged) {
@@ -622,6 +643,7 @@
           Navigator.startSmoothTrack(220);
           Collapse.startStickyTrack(220);
           startScrollBtnTrack(220);
+          if (TokenTracker) TokenTracker.startSmoothTrack(220);
         }
         scheduleScrollBtnUpdate();
       }

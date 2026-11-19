@@ -24,6 +24,7 @@
     autoCollapse: true,
     openPastChats: 4,
     hideSources: true,
+    showTokenUsage: true,
     textOpt: DEFAULT_TEXT_OPT
   });
 
@@ -80,6 +81,7 @@
       autoCollapse: bool(r.autoCollapse, d.autoCollapse),
       openPastChats: normalizeOpenPastChats(rawPast),
       hideSources: bool(r.hideSources, d.hideSources),
+      showTokenUsage: bool(r.showTokenUsage, d.showTokenUsage),
       textOpt: normalizeTextOpt(r.textOpt)
     };
   }

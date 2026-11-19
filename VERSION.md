@@ -1,8 +1,18 @@
 # Version Tracker
 
-Current: **1.22.20**
+Current: **1.25.24**
 
 ## History
+- 2026-11-19 | **1.25.24** (from 1.25.23) | `+0M +0m +1f` | Fix TokenTracker crash caused by unexported Selectors.isVisible
+  - `fix`: Export isVisible from GeminiOptSelectors so TokenTracker.scanDomSignals no longer throws TypeError on live Gemini pages
+- 2026-11-19 | **1.25.23** (from 1.25.20) | `+0M +0m +3f` | Fix Token Usage bar bottom placement, disclaimer hiding, and sidebar Pro badge detection
+  - `fix`: Search full composer/footer tree backward in findDisclaimer so Gemini disclaimer is found and hidden cleanly outside input-area-v2
+  - `fix`: Anchor .gopt-token-bar at viewport bottom using style.bottom, high z-index, and resize/late-layout listeners so bar never hides behind composer
+  - `fix`: Detect sidebar Pro badge footer and Hydrogen/Neon model tiers accurately
+- 2026-11-19 | **1.25.20** (from 1.22.20) | `+0M +3m +0f` | Add Token Usage bar, auto-detected plan, and local rolling daily/weekly quota tracker
+  - `minor`: Add Token Usage inline bar below composer replacing native disclaimer with Full Width alignment, scaleX context bar, and upward hover breakdown tooltip
+  - `minor`: Add zero-config Gemini plan auto-detection (Free 32k, Plus 128k, Pro 1M, Ultra 1M) with compute-weighted rolling 24h Daily and 7d Weekly % left countdowns and anti-double-count tracking
+  - `minor`: Add Token Usage Popup toggle, + media indicator, and independent context/daily/weekly warning color thresholds
 - 2026-11-19 | **1.22.20** (from 1.19.20) | `+0M +3m +0f` | Improve heavy conversation cold-load performance (Stages 1-3, Angular-safe)
   - `minor`: Add synchronous document_start CSS pre-wrap and localStorage mirror via early-boot.js so older turns stay compact before Angular paints
   - `minor`: Boot main scripts at document_end with cold-load rAF fast-path and requestIdleCallback attribution deferral

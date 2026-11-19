@@ -15,6 +15,8 @@
   --gopt-fg-2: #444746;
   --gopt-border: #c4c7c5;
   --gopt-accent: #0b57d0;
+  --gopt-warn: #b45309;
+  --gopt-crit: #b91c1c;
   --gopt-strip: #444746;
   --gopt-focus: #0b57d0;
   --gopt-tip-bg: #ffffff;
@@ -28,6 +30,8 @@ html.gopt-dark {
   --gopt-fg-2: #c4c7c5;
   --gopt-border: #444746;
   --gopt-accent: #a8c7fa;
+  --gopt-warn: #fbbf24;
+  --gopt-crit: #f87171;
   --gopt-strip: #c4c7c5;
   --gopt-focus: #a8c7fa;
   --gopt-tip-bg: #282a2c;
@@ -399,8 +403,132 @@ html.gopt-active :is(
   display: none !important;
 }
 
+/* ---------- inline Token Usage & quota bar (disclaimer slot, zero layout shift) ---------- */
+html.gopt-active.gopt-token-bar-active :is(
+  hallucination-disclaimer,
+  .hallucination-disclaimer,
+  [data-test-id="disclaimer"],
+  footer .disclaimer,
+  .bottom-container .disclaimer-container,
+  .disclaimer-container,
+  .disclaimer-text,
+  [data-gopt-disclaimer]
+) {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.gopt-token-bar {
+  position: fixed;
+  left: 0;
+  bottom: 4px;
+  z-index: 2147482900;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-family: "Google Sans Text", "Google Sans", Roboto, system-ui, sans-serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  color: var(--gopt-fg-2);
+  cursor: default;
+  opacity: 0;
+  transition-property: opacity, color;
+  transition-duration: var(--gopt-dur-fast);
+  transition-timing-function: var(--gopt-ease-out);
+}
+html.gopt-active .gopt-token-bar { display: flex; pointer-events: none; }
+html.gopt-active .gopt-token-bar.is-visible { opacity: 1; pointer-events: auto; }
+.gopt-token-bar:focus-visible { outline: 2px solid var(--gopt-focus); outline-offset: 1px; }
+
+.gopt-tk-meter {
+  flex: none;
+  position: relative;
+  width: 48px;
+  height: 3px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--gopt-fg) 14%, transparent);
+}
+.gopt-tk-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--gopt-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition-property: transform, background-color;
+  transition-duration: var(--gopt-dur);
+  transition-timing-function: var(--gopt-ease-out);
+}
+.gopt-tk-fill[data-level="warn"] { background: var(--gopt-warn); }
+.gopt-tk-fill[data-level="crit"] { background: var(--gopt-crit); }
+
+.gopt-tk-ctx, .gopt-tk-day, .gopt-tk-week { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.gopt-tk-ctx[data-level="warn"],
+.gopt-tk-day[data-level="warn"],
+.gopt-tk-week[data-level="warn"] { color: var(--gopt-warn); }
+.gopt-tk-ctx[data-level="crit"],
+.gopt-tk-day[data-level="crit"],
+.gopt-tk-week[data-level="crit"] { color: var(--gopt-crit); font-weight: 600; }
+.gopt-tk-sep { opacity: 0.55; flex: none; }
+
+/* Upward token tooltip portal */
+.gopt-token-tooltip {
+  max-width: 296px;
+  min-width: 244px;
+  padding: 10px 12px;
+  font-variant-numeric: tabular-nums;
+  transform: translateY(4px) scale(0.96);
+  transform-origin: bottom center;
+}
+.gopt-token-tooltip.is-visible { opacity: 1; transform: translateY(0) scale(1); }
+.gopt-tk-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 7px;
+}
+.gopt-tk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.gopt-tk-lbl { color: var(--gopt-fg-2); }
+.gopt-tk-val { color: var(--gopt-fg); font-weight: 500; margin-left: auto; }
+.gopt-tk-media {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: var(--gopt-accent);
+  background: color-mix(in srgb, var(--gopt-accent) 12%, transparent);
+}
+.gopt-tk-divider { height: 1px; margin: 7px 0 0; background: var(--gopt-border); opacity: 0.65; }
+.gopt-tk-footer {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--gopt-border) 55%, transparent);
+  font-size: 11px;
+  color: var(--gopt-fg-2);
+}
+
 /* ---------- hover (fine pointers only) ---------- */
 @media (hover: hover) and (pointer: fine) {
+  .gopt-token-bar:hover { background: var(--gopt-surface); color: var(--gopt-fg); }
   .gopt-collapsed-bar:hover { background: var(--gopt-surface-hover); }
   .gopt-collapsed-bar:hover .gopt-bar-action svg { transform: translateY(2px); }
   html.gopt-active .gopt-scroll-bottom-btn.is-visible:hover {
@@ -431,6 +559,9 @@ html.gopt-active :is(
   .gopt-recollapse-label {
     transition-property: opacity, background-color;
   }
+  .gopt-tk-fill {
+    transition-property: background-color;
+  }
   .gopt-bar-action svg,
   .gopt-scroll-bottom-btn svg {
     transition: none;
@@ -442,11 +573,13 @@ html.gopt-active :is(
     transform: none;
   }
   .gopt-tooltip,
+  .gopt-token-tooltip,
   .gopt-scroll-bottom-btn {
     transform: none;
     transition-property: opacity, background-color;
   }
   .gopt-tooltip.is-visible,
+  .gopt-token-tooltip.is-visible,
   html.gopt-active .gopt-scroll-bottom-btn.is-visible {
     transform: none;
   }
