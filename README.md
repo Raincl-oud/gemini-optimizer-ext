@@ -9,7 +9,7 @@
 [![CI](https://github.com/Raincl-oud/gemini-optimizer-ext/actions/workflows/ci.yml/badge.svg)](https://github.com/Raincl-oud/gemini-optimizer-ext/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-1.22.20-0b57d0?style=flat)](VERSION.md)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-0b57d0?style=flat)](manifest.json)
-[![Browsers](https://img.shields.io/badge/browsers-Chrome%20%7C%20Edge%20%7C%20Opera%20GX-334155?style=flat)](#installation)
+[![Browsers](https://img.shields.io/badge/browsers-Chromium%20Based%20Browsers-334155?style=flat)](#installation)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-16a34a?style=flat)](#development--testing)
 [![License: MIT](https://img.shields.io/badge/license-MIT-475569?style=flat)](LICENSE)
 
