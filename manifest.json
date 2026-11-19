@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini Web Optimizer",
+  "version": "1.22.20",
+  "description": "Wrap long chats, navigate faster, customize typography, and hide source clutter on Gemini Web.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["https://gemini.google.com/*"],
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "content_scripts": [
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "run_at": "document_start",
+      "css": ["src/content/early-perf.css", "src/content/ui-overlay.css"],
+      "js": ["src/content/early-boot.js"]
+    },
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "run_at": "document_end",
+      "js": [
+        "src/shared/settings.js",
+        "src/shared/selectors.js",
+        "src/content/collapse-manager.js",
+        "src/content/strip-navigator.js",
+        "src/content/main.js"
+      ]
+    }
+  ]
+}

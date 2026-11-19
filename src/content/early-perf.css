@@ -1,0 +1,192 @@
+/* Gemini Web Optimizer - early performance hints & gated full-width layout (document_start).
+ * Skips rendering work for off-screen open turns while letting collapsed turns shrink to zero gap.
+ * Full-width rules are gated behind html.gopt-text-fullwidth (LR26-verified chain) with 44px left and 74px right gutters,
+ * button-safe, prompt-bubble-safe, and Canvas split-pane safe. */
+.conversation-container:not(.gopt-turn-collapsed),
+[data-gopt-turn]:not(.gopt-turn-collapsed) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 640px;
+}
+
+/* The newest turn (and any streaming turn) must never be skipped. */
+.conversation-container:last-child,
+[data-gopt-turn]:last-child,
+.gopt-turn-streaming {
+  content-visibility: visible;
+}
+
+/* Make Gemini LR26 inline custom elements block-level when turn is NOT collapsed. */
+html.gopt-text-fullwidth :is(.conversation-container, [data-gopt-turn]):not(.gopt-turn-collapsed) :is(
+  response-container, model-response-content, structured-content-container, message-content, user-query-content
+) {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Full-width outer structural containers & scrollers. */
+html.gopt-text-fullwidth :is(
+  chat-window-content, .chat-container, .chat-history-scroll-container,
+  infinite-scroller.chat-history, .chat-history, #chat-history, [data-test-id="chat-history-container"], main .chat-history,
+  model-response-text
+) {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  margin-inline: 0 !important;
+}
+
+/* Nested composer children stay 100% inside outermost composer (never compound narrow width). */
+html.gopt-text-fullwidth :is(input-container, input-area-v2, .input-area-container, .bottom-container)
+  :is(input-container, input-area-v2, .input-area-container, .bottom-container, rich-textarea, .text-input-field) {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  margin-inline: 0 !important;
+}
+
+/* Short user prompt bubbles size naturally while long prompts can expand up to 100%. */
+html.gopt-text-fullwidth .user-query-bubble-with-background {
+  max-width: 100% !important;
+}
+
+/* Zero horizontal padding on scroll containers so turn/composer gutters align identically. */
+html.gopt-text-fullwidth :is(
+  .chat-history-scroll-container,
+  infinite-scroller.chat-history, .chat-history, #chat-history, [data-test-id="chat-history-container"], main .chat-history
+) {
+  box-sizing: border-box !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Stretch only vertical column containers (never horizontal composer toolbar rows). */
+html.gopt-text-fullwidth :is(
+  chat-window-content, .chat-container, .chat-history-scroll-container,
+  infinite-scroller.chat-history, .chat-history, #chat-history, [data-test-id="chat-history-container"], main .chat-history,
+  .conversation-container, [data-gopt-turn]
+) {
+  align-items: stretch !important;
+  justify-items: stretch !important;
+}
+
+/* Exact LR26 response & query wrapper chain inside .conversation-container. */
+html.gopt-text-fullwidth :is(
+  model-response, model-response > div, div.response-container, .response-container-with-gpi,
+  div.presented-response-container, div.response-container-content, div.response-content,
+  model-response-content, structured-content-container, structured-content-container > div.container,
+  message-content, div.markdown.markdown-main-panel,
+  user-query, user-query > div, user-query-content, .user-query-container, .query-content
+) {
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+  flex-basis: auto !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  margin-inline: 0 !important;
+}
+
+html.gopt-text-fullwidth :is(
+  div.presented-response-container, div.response-container-content, div.response-content,
+  model-response-content, structured-content-container, structured-content-container > div.container,
+  message-content, div.markdown.markdown-main-panel
+) {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-inline: 0 !important;
+}
+
+html.gopt-text-fullwidth :is(div.response-container, div.presented-response-container) {
+  justify-content: flex-start !important;
+}
+
+/* Clear LR26 markdown prose width limits without touching code/tables/buttons/media. */
+html.gopt-text-fullwidth :is(model-response, .markdown, .markdown-main-panel)
+  > :is(p, ol, ul, blockquote, h1, h2, h3, h4, h5, h6, div, section, hr):not([role="button"]):not(:is(
+    pre, code, code-block, table, button, img, svg
+  ) *) {
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  margin-inline: 0 !important;
+}
+
+/* Intermediate block wrappers inside chat-history & composer: allow full width without overriding turn/composer width or centering. */
+html.gopt-text-fullwidth :is(
+  infinite-scroller.chat-history, #chat-history, [data-test-id="chat-history-container"], main .chat-history,
+  input-area-v2, .input-area-container, .bottom-container
+) :is(div, section):not([role="button"]):not(.gopt-recollapse-btn):not(.gopt-collapsed-bar):not(.conversation-container, [data-gopt-turn], .input-area-container, .bottom-container):not(:is(
+  pre, code, code-block, table, button, img, svg, immersive-panel, [data-test-id*="canvas" i]
+) *) {
+  max-width: 100% !important;
+}
+
+html.gopt-text-fullwidth :is(
+  infinite-scroller.chat-history, #chat-history, [data-test-id="chat-history-container"], main .chat-history,
+  input-area-v2, .input-area-container, .bottom-container
+) :is(div, section):has(> :is(
+  .conversation-container, [data-gopt-turn], user-query, model-response,
+  message-content, .markdown, .markdown-main-panel, rich-textarea, .text-input-field
+)):not([role="button"]):not(.conversation-container, [data-gopt-turn], .input-area-container, .bottom-container):not(:is(pre, code, code-block, table, button, img, svg, immersive-panel, [data-test-id*="canvas" i]) *) {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Center configurable width (60..100%) on turns with safe 44px left / 74px right gutters. */
+html.gopt-text-fullwidth :is(infinite-scroller.chat-history, #chat-history, [data-test-id="chat-history-container"], main .chat-history)
+  :is(.conversation-container, [data-gopt-turn]) {
+  box-sizing: border-box !important;
+  width: var(--gopt-content-width, 100%) !important;
+  max-width: var(--gopt-content-width, 100%) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  margin-inline: auto !important;
+  padding-left: 44px !important;
+  padding-right: 74px !important;
+}
+
+html.gopt-text-fullwidth :is(input-container, input-area-v2, .input-area-container, .bottom-container, .text-input-field) {
+  box-sizing: border-box !important;
+}
+
+/* Outermost composer mirrors configurable width, centered margins & safe gutters without nested shrinking. */
+html.gopt-text-fullwidth :is(input-container, input-area-v2, .input-area-container, .bottom-container):not(:is(input-container, input-area-v2, .input-area-container, .bottom-container) *) {
+  box-sizing: border-box !important;
+  width: var(--gopt-content-width, 100%) !important;
+  max-width: var(--gopt-content-width, 100%) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  margin-inline: auto !important;
+  padding-left: 44px !important;
+  padding-right: 74px !important;
+}
+
+/* Temporary visual effect suppression during brief initial cold-load burst (~0.5s). */
+html.gopt-cold-loading:not(.gopt-width-animating) :is(main, .chat-history, .conversation-container, [data-gopt-turn]) :not([data-gopt-owned]):not([data-gopt-owned] *),
+html.gopt-cold-loading:not(.gopt-width-animating) :is(.conversation-container, [data-gopt-turn]) {
+  box-shadow: none !important;
+  filter: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Smooth transition active ONLY during the 280ms full-width toggle window (off during scroll/streaming). */
+@media (prefers-reduced-motion: no-preference) {
+  html.gopt-width-animating :is(
+    .conversation-container, [data-gopt-turn],
+    user-query, user-query-content, .user-query-container, .query-content,
+    model-response, response-container, div.response-container, div.presented-response-container,
+    div.response-container-content, div.response-content, model-response-content,
+    structured-content-container, div.container, message-content, model-response-text,
+    .markdown, .markdown-main-panel,
+    input-container, input-area-v2, .input-area-container, .bottom-container, .text-input-field, rich-textarea
+  ) {
+    transition-property: width, max-width, padding-left, padding-right;
+    transition-duration: 240ms;
+    transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+}

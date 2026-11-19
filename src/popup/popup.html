@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gemini Optimizer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="gopt-pop-header">
+    <svg class="logo" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+      <rect x="0" y="0" width="24" height="24" rx="6" fill="#0b57d0"/>
+      <rect x="5" y="5" width="14" height="2.4" rx="1.2" fill="#ffffff" fill-opacity="0.78"/>
+      <rect x="5" y="9.2" width="10" height="2.4" rx="1.2" fill="#ffffff" fill-opacity="0.78"/>
+      <rect x="5" y="13.4" width="14" height="2.4" rx="1.2" fill="#ffffff"/>
+      <rect x="5" y="17.6" width="8" height="2.4" rx="1.2" fill="#ffffff" fill-opacity="0.78"/>
+    </svg>
+    <h1>Gemini Optimizer</h1>
+    <span class="ver-badge" id="ext-version">v1.0</span>
+  </header>
+  <output id="status-pill" class="pill" role="status" aria-live="polite" data-state="idle">
+    <span class="pill-dot" aria-hidden="true"></span>
+    <span id="status-text">Checking tab...</span>
+  </output>
+
+  <section class="group" aria-label="Settings">
+    <div class="row">
+      <div class="text">
+        <label class="label" for="hideSources">Hide Sources &amp; Citations</label>
+        <p class="desc" id="hideSources-desc">Citation chips, Sources cards, context badges</p>
+      </div>
+      <button type="button" role="switch" id="hideSources" class="switch" aria-checked="true" aria-describedby="hideSources-desc"><span class="track"><span class="thumb"></span></span></button>
+    </div>
+
+    <div class="row">
+      <div class="text">
+        <label class="label" for="autoCollapse">Wrap Long Chats</label>
+        <p class="desc" id="autoCollapse-desc">Collapse older Past Chats into compact bars</p>
+      </div>
+      <button type="button" role="switch" id="autoCollapse" class="switch" aria-checked="true" aria-describedby="autoCollapse-desc"><span class="track"><span class="thumb"></span></span></button>
+    </div>
+
+    <div class="acc-collapse is-open" id="openPastChats-wrap">
+      <div class="acc-inner">
+        <div class="row sub" id="openPastChats-row">
+          <div class="text">
+            <label class="label" id="openPastChats-label" for="openPastChats">Open Past Chats</label>
+            <p class="desc" id="openPastChats-desc">0 = keep only the active chat open</p>
+          </div>
+          <div class="stepper" role="group" aria-labelledby="openPastChats-label">
+            <button type="button" class="step-btn" id="openPastDec" aria-label="Decrease open Past Chats">
+              <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M2.5 6h7"/></svg>
+            </button>
+            <input type="number" id="openPastChats" class="num-input" min="0" max="999" step="1" value="4" inputmode="numeric" aria-describedby="openPastChats-desc">
+            <button type="button" class="step-btn" id="openPastInc" aria-label="Increase open Past Chats">
+              <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M6 2.5v7"/><path d="M2.5 6h7"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="accordion" id="textOpt-accordion">
+      <button type="button" class="accordion-trigger" id="textOpt-trigger" aria-expanded="false" aria-controls="textOpt-panel">
+        <span class="acc-title">Text Optimization</span>
+        <span class="acc-meta" id="textOpt-meta">Default</span>
+        <svg class="acc-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+
+      <div class="acc-collapse" id="textOpt-panel" aria-hidden="true" inert>
+        <div class="acc-inner">
+          <div class="accordion-body">
+            <div class="row compact">
+              <div class="text">
+                <label class="sub-label" for="textFullWidth">Full Width</label>
+                <p class="desc" id="textFullWidth-desc">Expand chat, wrapped bars, and input width</p>
+              </div>
+              <button type="button" role="switch" id="textFullWidth" class="switch" aria-checked="true" aria-describedby="textFullWidth-desc"><span class="track"><span class="thumb"></span></span></button>
+            </div>
+
+            <div class="acc-collapse is-open" id="contentWidth-wrap">
+              <div class="acc-inner">
+                <div class="slider-row compact-slider">
+                  <div class="slider-head">
+                    <label class="sub-label" for="contentWidth">Content Width</label>
+                    <output class="slider-val" id="contentWidth-val" for="contentWidth" data-unset="true">100%</output>
+                  </div>
+                  <input type="range" class="slider" id="contentWidth" min="60" max="100" step="2" value="100">
+                </div>
+              </div>
+            </div>
+
+            <div class="opt-block">
+              <span class="sub-label" id="fontFamily-label">Font Family</span>
+              <div class="segmented" id="fontFamily" role="radiogroup" aria-labelledby="fontFamily-label" data-count="4">
+                <span class="seg-indicator" aria-hidden="true"></span>
+                <button type="button" role="radio" aria-checked="true" data-value="default">Default</button>
+                <button type="button" role="radio" aria-checked="false" data-value="sans">Sans</button>
+                <button type="button" role="radio" aria-checked="false" data-value="serif">Serif</button>
+                <button type="button" role="radio" aria-checked="false" data-value="mono">Mono</button>
+              </div>
+            </div>
+
+            <div class="slider-row">
+              <div class="slider-head">
+                <label class="sub-label" for="fontSize">Font Size</label>
+                <output class="slider-val" id="fontSize-val" for="fontSize">Default</output>
+              </div>
+              <input type="range" class="slider" id="fontSize" min="13" max="22" step="1" value="16" data-unset="true">
+            </div>
+
+            <div class="slider-row">
+              <div class="slider-head">
+                <label class="sub-label" for="lineHeight">Line Height</label>
+                <output class="slider-val" id="lineHeight-val" for="lineHeight">Default</output>
+              </div>
+              <input type="range" class="slider" id="lineHeight" min="1.2" max="2.2" step="0.05" value="1.6" data-unset="true">
+            </div>
+
+            <div class="slider-row">
+              <div class="slider-head">
+                <label class="sub-label" for="paragraphGap">Paragraph Gap</label>
+                <output class="slider-val" id="paragraphGap-val" for="paragraphGap">Default</output>
+              </div>
+              <input type="range" class="slider" id="paragraphGap" min="4" max="28" step="2" value="12" data-unset="true">
+            </div>
+
+            <div class="slider-row">
+              <div class="slider-head">
+                <label class="sub-label" for="letterSpacing">Letter Spacing</label>
+                <output class="slider-val" id="letterSpacing-val" for="letterSpacing">Default</output>
+              </div>
+              <input type="range" class="slider" id="letterSpacing" min="-0.03" max="0.08" step="0.01" value="0" data-unset="true">
+            </div>
+
+            <button type="button" class="reset-btn" id="resetTextOpt" disabled>Reset Typography</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="actions" aria-label="Quick actions">
+    <button type="button" class="action" data-action="expandAll" disabled>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5"/><path d="M3 3l6 6"/><path d="M16 21h5v-5"/><path d="M21 21l-6-6"/></svg>
+      <span>Open All</span>
+    </button>
+    <button type="button" class="action" data-action="collapseOld" disabled>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h5V3"/><path d="M9 9L3 3"/><path d="M21 16h-5v5"/><path d="M15 15l6 6"/></svg>
+      <span>Wrap Old</span>
+    </button>
+    <button type="button" class="action" data-action="scrollTop" disabled>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14"/><path d="M12 20V9"/><path d="M7 13l5-5 5 5"/></svg>
+      <span>Top</span>
+    </button>
+    <button type="button" class="action" data-action="scrollBottom" disabled>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/></svg>
+      <span>Bottom</span>
+    </button>
+  </section>
+
+  <script src="../shared/settings.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

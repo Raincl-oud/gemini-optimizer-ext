@@ -1,0 +1,509 @@
+/* Gemini Web Optimizer - in-page UI (document_start).
+ * Every rule is gated by an html.gopt-* class or a .gopt-* element, so it is inert until main.js runs.
+ * Transforms are written inline per element or via class/hover states; no parent CSS var drives child transforms. */
+
+:root {
+  --gopt-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --gopt-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --gopt-dur-fast: 150ms;
+  --gopt-dur: 180ms;
+  --gopt-dur-tip: 160ms;
+
+  --gopt-surface: #f0f4f9;
+  --gopt-surface-hover: #e3e9f1;
+  --gopt-fg: #1f1f1f;
+  --gopt-fg-2: #444746;
+  --gopt-border: #c4c7c5;
+  --gopt-accent: #0b57d0;
+  --gopt-strip: #444746;
+  --gopt-focus: #0b57d0;
+  --gopt-tip-bg: #ffffff;
+  --gopt-shadow: 0 4px 16px -4px rgb(31 31 31 / 0.18), 0 1px 3px rgb(31 31 31 / 0.10);
+}
+
+html.gopt-dark {
+  --gopt-surface: #1e1f20;
+  --gopt-surface-hover: #282a2c;
+  --gopt-fg: #e3e3e3;
+  --gopt-fg-2: #c4c7c5;
+  --gopt-border: #444746;
+  --gopt-accent: #a8c7fa;
+  --gopt-strip: #c4c7c5;
+  --gopt-focus: #a8c7fa;
+  --gopt-tip-bg: #282a2c;
+  --gopt-shadow: 0 6px 20px -6px rgb(0 0 0 / 0.6), 0 1px 3px rgb(0 0 0 / 0.4);
+}
+
+/* ---------- collapsed Past Chats (zero dark gap, tight 2px rhythm) ---------- */
+.gopt-turn-collapsed,
+:is(div, section, article):has(> .gopt-turn-collapsed) {
+  content-visibility: visible !important;
+  contain-intrinsic-size: none !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  row-gap: 0 !important;
+  gap: 0 !important;
+}
+.gopt-turn-collapsed {
+  contain: layout style !important;
+}
+:is(infinite-scroller.chat-history, #chat-history, [data-test-id="chat-history-container"], main .chat-history),
+:is(infinite-scroller.chat-history, #chat-history, [data-test-id="chat-history-container"], main .chat-history) > :is(div, section) {
+  row-gap: 2px !important;
+  gap: 2px !important;
+}
+:is(.conversation-container, [data-gopt-turn]):not(.gopt-turn-collapsed) {
+  margin-bottom: 20px !important;
+}
+
+.gopt-turn-collapsed > :not(.gopt-collapsed-bar) { display: none !important; }
+.gopt-collapsed-bar { display: none; }
+.gopt-turn-collapsed > .gopt-collapsed-bar { display: flex; }
+.gopt-recollapse-btn { display: none; }
+.gopt-turn-manual-open {
+  position: relative;
+  content-visibility: visible !important;
+  contain: none !important;
+}
+.gopt-turn-manual-open > .gopt-recollapse-btn { display: inline-flex; }
+
+/* Smooth reveal for newly manually opened Past Chat content. */
+.gopt-turn-manual-open > :not(.gopt-recollapse-btn):not(.gopt-collapsed-bar) {
+  transition-property: opacity, transform;
+  transition-duration: var(--gopt-dur);
+  transition-timing-function: var(--gopt-ease-out);
+}
+@starting-style {
+  .gopt-turn-manual-open > :not(.gopt-recollapse-btn):not(.gopt-collapsed-bar) {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.gopt-collapsed-bar {
+  box-sizing: border-box;
+  min-height: 44px;
+  height: auto;
+  width: 100%;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  margin: 1px 0 !important;
+  border: 1px solid var(--gopt-border);
+  border-radius: 14px;
+  background: var(--gopt-surface);
+  color: var(--gopt-fg);
+  font-family: "Google Sans Text", "Google Sans", Roboto, system-ui, sans-serif;
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+  transition-property: background-color, opacity, transform;
+  transition-duration: var(--gopt-dur-fast);
+  transition-timing-function: ease;
+}
+.gopt-turn-collapsed > .gopt-collapsed-bar {
+  transition-timing-function: var(--gopt-ease-out);
+}
+@starting-style {
+  .gopt-turn-collapsed > .gopt-collapsed-bar { opacity: 0; transform: translateY(-2px); }
+}
+.gopt-collapsed-bar:active { transform: scale(0.98); }
+.gopt-bar-index {
+  font-variant-numeric: tabular-nums;
+  color: var(--gopt-accent);
+  background: color-mix(in srgb, var(--gopt-accent) 12%, transparent);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.9em;
+  font-weight: 600;
+  flex: none;
+}
+.gopt-bar-snippet {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gopt-fg-2);
+  font-weight: 400;
+}
+.gopt-bar-action { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--gopt-fg-2); }
+.gopt-bar-action svg {
+  transition-property: transform;
+  transition-duration: var(--gopt-dur-fast);
+  transition-timing-function: var(--gopt-ease-out);
+}
+
+/* ---------- dynamic sticky Wrap pill (54px circle -> 114px pill on hover/focus) ---------- */
+.gopt-recollapse-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 32;
+  box-sizing: border-box;
+  width: 114px;
+  height: 54px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  pointer-events: none;
+  transition: none;
+}
+.gopt-recollapse-btn.is-sticky-bottom {
+  top: auto;
+  bottom: 8px;
+}
+html.gopt-active .gopt-recollapse-btn.is-sticky-mid {
+  display: inline-flex;
+  position: fixed;
+  top: calc(50vh - 27px);
+  right: auto;
+  bottom: auto;
+  z-index: 32;
+}
+
+.gopt-recollapse-pill {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: 114px;
+  height: 54px;
+  border-radius: 999px;
+  border: 1px solid var(--gopt-border);
+  background: var(--gopt-surface);
+  color: var(--gopt-fg-2);
+  box-shadow: var(--gopt-shadow);
+  opacity: 0.85;
+  pointer-events: auto;
+  clip-path: inset(0 0 0 60px round 999px);
+  transition-property: transform, opacity, background-color, clip-path;
+  transition-duration: var(--gopt-dur);
+  transition-timing-function: var(--gopt-ease-out);
+}
+
+.gopt-recollapse-icon {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  transition-property: transform;
+  transition-duration: var(--gopt-dur);
+  transition-timing-function: var(--gopt-ease-out);
+}
+
+.gopt-recollapse-label {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  font-family: "Google Sans Text", "Google Sans", Roboto, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(8px, -50%);
+  transition-property: opacity, transform;
+  transition-duration: var(--gopt-dur);
+  transition-timing-function: var(--gopt-ease-out);
+}
+
+.gopt-recollapse-btn:active .gopt-recollapse-pill { transform: scale(0.96); }
+
+.gopt-collapsed-bar:focus-visible {
+  outline: 2px solid var(--gopt-focus);
+  outline-offset: 2px;
+}
+.gopt-recollapse-btn:focus-visible {
+  outline: 2px solid var(--gopt-focus);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+.gopt-recollapse-btn:focus-visible .gopt-recollapse-pill {
+  clip-path: inset(0 0 0 0 round 999px);
+  opacity: 1;
+  background: var(--gopt-surface-hover);
+}
+.gopt-recollapse-btn:focus-visible .gopt-recollapse-icon {
+  transform: translate(-60px, -50%);
+}
+.gopt-recollapse-btn:focus-visible .gopt-recollapse-label {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+/* ---------- left strip rail ---------- */
+.gopt-rail {
+  position: fixed;
+  z-index: 30;
+  width: 28px;
+  display: none;
+  pointer-events: none;
+}
+html.gopt-active .gopt-rail.has-turns { display: block; }
+.gopt-rail-list {
+  pointer-events: auto;
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  padding: 8px 0;
+}
+.gopt-rail-list::-webkit-scrollbar { display: none; }
+.gopt-strip {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 10px;
+  padding: 0 0 0 2px;
+  margin: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.gopt-strip-bar {
+  width: 14px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--gopt-strip);
+  opacity: 0.55;
+  transform-origin: left center;
+  transition-property: transform, opacity, background-color;
+  transition-duration: var(--gopt-dur), var(--gopt-dur-fast), var(--gopt-dur-fast);
+  transition-timing-function: var(--gopt-ease-out), ease, ease;
+}
+/* Promote to a compositor layer only while the rail is being interacted with (not 100+ idle layers). */
+.gopt-rail:hover .gopt-strip-bar { will-change: transform; }
+.gopt-strip.is-active .gopt-strip-bar { background: var(--gopt-accent); }
+.gopt-strip:focus-visible {
+  outline: 2px solid var(--gopt-focus);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+/* ---------- tooltip portal ---------- */
+.gopt-tooltip {
+  position: fixed;
+  z-index: 2147483000;
+  box-sizing: border-box;
+  max-width: 280px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--gopt-tip-bg);
+  color: var(--gopt-fg);
+  border: 1px solid var(--gopt-border);
+  box-shadow: var(--gopt-shadow);
+  font-family: "Google Sans Text", Roboto, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-4px) scale(0.96);
+  transform-origin: left center;
+  transition-property: opacity, transform;
+  transition-duration: var(--gopt-dur-tip);
+  transition-timing-function: var(--gopt-ease-out);
+}
+.gopt-tooltip.is-visible { opacity: 1; transform: translateX(0) scale(1); }
+html:not(.gopt-active) .gopt-tooltip { display: none; }
+.gopt-tooltip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.gopt-tooltip-index { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--gopt-accent); }
+.gopt-tooltip-status {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--gopt-surface);
+  color: var(--gopt-fg-2);
+}
+.gopt-tooltip-status.is-collapsed {
+  color: var(--gopt-accent);
+  background: color-mix(in srgb, var(--gopt-accent) 12%, transparent);
+}
+.gopt-tooltip-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 4px 0 0;
+  color: var(--gopt-fg-2);
+}
+
+/* ---------- circular Scroll to bottom button (54x54 px) ---------- */
+.gopt-scroll-bottom-btn {
+  position: fixed;
+  z-index: 35;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  border-radius: 9999px;
+  border: 1px solid var(--gopt-border);
+  background: var(--gopt-surface);
+  color: var(--gopt-fg);
+  box-shadow: var(--gopt-shadow);
+  cursor: pointer;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(6px) scale(0.92);
+  transition-property: opacity, transform, background-color;
+  transition-duration: var(--gopt-dur);
+  transition-timing-function: var(--gopt-ease-out);
+}
+.gopt-scroll-bottom-btn svg {
+  transition-property: transform;
+  transition-duration: var(--gopt-dur-fast);
+  transition-timing-function: var(--gopt-ease-out);
+}
+html.gopt-active .gopt-scroll-bottom-btn { display: inline-flex; }
+html.gopt-active .gopt-scroll-bottom-btn.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+html.gopt-active .gopt-scroll-bottom-btn.is-visible:active { transform: translateY(0) scale(0.95); }
+.gopt-scroll-bottom-btn:focus-visible {
+  outline: 2px solid var(--gopt-focus);
+  outline-offset: 2px;
+}
+
+/* Hide Gemini native scroll-to-bottom button so there are never two down arrows. */
+html.gopt-active :is(
+  button.scroll-to-bottom-button,
+  button[aria-label*="scroll to bottom" i],
+  button[aria-label*="ke bawah" i]:not(.gopt-scroll-bottom-btn),
+  [data-test-id="scroll-to-bottom"]
+) {
+  display: none !important;
+}
+
+/* ---------- hover (fine pointers only) ---------- */
+@media (hover: hover) and (pointer: fine) {
+  .gopt-collapsed-bar:hover { background: var(--gopt-surface-hover); }
+  .gopt-collapsed-bar:hover .gopt-bar-action svg { transform: translateY(2px); }
+  html.gopt-active .gopt-scroll-bottom-btn.is-visible:hover {
+    background: var(--gopt-surface-hover);
+    transform: translateY(-1px) scale(1.03);
+  }
+  html.gopt-active .gopt-scroll-bottom-btn.is-visible:hover svg { transform: translateY(2px); }
+  .gopt-recollapse-btn:hover .gopt-recollapse-pill {
+    clip-path: inset(0 0 0 0 round 999px);
+    opacity: 1;
+    background: var(--gopt-surface-hover);
+  }
+  .gopt-recollapse-btn:hover .gopt-recollapse-icon {
+    transform: translate(-60px, -50%);
+  }
+  .gopt-recollapse-btn:hover .gopt-recollapse-label {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+}
+
+/* ---------- motion preferences ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .gopt-strip-bar,
+  .gopt-collapsed-bar,
+  .gopt-recollapse-pill,
+  .gopt-recollapse-icon,
+  .gopt-recollapse-label {
+    transition-property: opacity, background-color;
+  }
+  .gopt-bar-action svg,
+  .gopt-scroll-bottom-btn svg {
+    transition: none;
+    transform: none;
+  }
+  .gopt-turn-manual-open > :not(.gopt-recollapse-btn):not(.gopt-collapsed-bar) {
+    transition-property: opacity;
+    transition-duration: 150ms;
+    transform: none;
+  }
+  .gopt-tooltip,
+  .gopt-scroll-bottom-btn {
+    transform: none;
+    transition-property: opacity, background-color;
+  }
+  .gopt-tooltip.is-visible,
+  html.gopt-active .gopt-scroll-bottom-btn.is-visible {
+    transform: none;
+  }
+}
+
+/* ---------- hide sources (mirrors SEL.sourcesStatic in src/shared/selectors.js) ---------- */
+html.gopt-hide-sources :is(
+  sources-carousel-inline, sources-carousel, source-footnote, sources-list, inline-source-chip,
+  .source-inline-chip, .citation-chip, sup.superscript[data-turn-source-index],
+  button[data-test-id="sources-button"], [data-test-id="sources-panel"],
+  context-attribution, response-attribution, [data-gopt-attribution]
+):not(:is(model-thoughts, .thoughts-container) *) {
+  display: none !important;
+}
+
+/* ---------- light render (always-on; yields during html.gopt-width-animating) ---------- */
+html.gopt-light-render:not(.gopt-width-animating) :is(model-response, message-content, .markdown) * {
+  animation: none !important;
+  transition: none !important;
+}
+html.gopt-light-render :is(main, chat-window, model-response, .chat-history) * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.gopt-light-render .gopt-strip-bar { transition-duration: 120ms; }
+
+/* ---------- text optimization (independent per field; syncs .gopt-collapsed-bar; protects pre/code/code-block/table) ---------- */
+html.gopt-font-sans :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote, strong, em), user-query, user-query .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+  font-family: "Google Sans Text", "Google Sans", Inter, Roboto, system-ui, sans-serif !important;
+}
+html.gopt-font-serif :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote, strong, em), user-query, user-query .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+  font-family: Georgia, "Source Serif 4", "Times New Roman", serif !important;
+}
+html.gopt-font-mono :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote, strong, em), user-query, user-query .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace !important;
+}
+:is(html.gopt-font-sans, html.gopt-font-serif, html.gopt-font-mono) :is(model-response, user-query) :is(table, table *) {
+  font-family: "Google Sans Text", "Google Sans", Roboto, system-ui, sans-serif !important;
+}
+:is(html.gopt-font-sans, html.gopt-font-serif, html.gopt-font-mono) :is(model-response, user-query) :is(pre, code, code-block, pre *, code *, code-block *) {
+  font-family: "JetBrains Mono", "Fira Code", Consolas, ui-monospace, monospace !important;
+}
+html.gopt-text-size :is(model-response .markdown, model-response .markdown :is(p, li, blockquote), user-query, .query-text, .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+  font-size: var(--gopt-font-size) !important;
+}
+html.gopt-text-size :is(model-response pre, model-response code, model-response code-block) {
+  font-size: calc(var(--gopt-font-size) * 0.88) !important;
+}
+html.gopt-text-lh :is(model-response .markdown, model-response .markdown :is(p, li, blockquote), user-query, .query-text, .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+  line-height: var(--gopt-line-height) !important;
+}
+html.gopt-text-gap :is(model-response .markdown p, model-response .markdown ul, model-response .markdown ol, model-response .markdown blockquote):not(:is(pre, code, code-block, table) *) {
+  margin-bottom: var(--gopt-paragraph-gap) !important;
+}
+html.gopt-text-ls :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote), user-query, .query-text, .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+  letter-spacing: var(--gopt-letter-spacing) !important;
+}
+html.gopt-text-ls :is(model-response, user-query) :is(pre, code, code-block, table, pre *, code *, code-block *, table *) {
+  letter-spacing: normal !important;
+}

@@ -1,0 +1,57 @@
+# Version Tracker
+
+Current: **1.22.20**
+
+## History
+- 2026-11-19 | **1.22.20** (from 1.19.20) | `+0M +3m +0f` | Improve heavy conversation cold-load performance (Stages 1-3, Angular-safe)
+  - `minor`: Add synchronous document_start CSS pre-wrap and localStorage mirror via early-boot.js so older turns stay compact before Angular paints
+  - `minor`: Boot main scripts at document_end with cold-load rAF fast-path and requestIdleCallback attribution deferral
+  - `minor`: Add collapsed-turn layout/style containment, temporary cold-load effect suppression, and lazy async media deferral
+- 2026-11-19 | **1.19.20** (from 1.16.18) | `+0M +3m +2f` | English localization, adjustable Content Width (60%-100%), home-screen full-width exemption, preview removal, and crisp #0b57d0 popup logo
+  - `minor`: Add adjustable Content Width slider (60%-100%) under Text Optimization centering chat turns, composer, and buttons synchronously
+  - `minor`: Localize extension Popup, in-page bars, 114x54px Wrap pill, tooltips, and manifest description to English (wrap/open terminology)
+  - `minor`: Exempt Gemini Home/New Chat welcome screen (turnCount === 0) from Full Width layout until first chat turn arrives
+  - `fix`: Remove typography preview box from Text Optimization popup accordion
+  - `fix`: Fix washed-out popup logo in Dark Mode by using solid #0b57d0 brand blue background
+- 2026-11-19 | **1.16.18** (from 1.12.12) | `+0M +4m +6f` | Full repo audit fixes, UI/UX craft enhancements, and purposeful animations
+  - `minor`: Add Popup header version badge, live streaming status dot, contextual action disable states, and confirmation feedback
+  - `minor`: Upgrade Past Chat terbuka input to tactile minus/plus stepper control with slider accent fill and live 2-paragraph typography preview
+  - `minor`: Add in-page UI polish with capsule turn index badge and tooltip status chip (Diringkas/Terbuka)
+  - `minor`: Add smooth grid accordion animations (.acc-collapse with inert), fine-pointer hover micro-nudges, and @starting-style turn expand entrance
+  - `fix`: Serialize concurrent saveSettings writes through promise queue to prevent read-modify-write races
+  - `fix`: Flush pendingTextOpt debounced edits on visibilitychange, pagehide, and unload
+  - `fix`: Exempt gopt-width-animating from gopt-light-render transition:none so full-width toggle animation works
+  - `fix`: Restore Canvas-safe full-width scroller and flex-stretch CSS rules while keeping short prompt bubbles compact
+  - `fix`: Deduplicate ResizeObserver targets to stop streaming 60fps loops and add BFCache-safe pagehide cleanup
+  - `fix`: Cache snippet length before DOM cloning, batch sticky button reads/writes, defer attribution scan during streaming, and remove dead computeRecollapseOffset
+- 2026-11-19 | **1.12.12** (from 1.12.10) | `+0M +0m +2f` | Fix LR26 full-width text chain and resize circular buttons to 54x54px
+  - `fix`: Expand Gemini LR26 response full-width chain by setting block display on inline custom elements and clearing flex-basis and prose width limits
+  - `fix`: Reduce Tutup lagi and scroll-to-bottom buttons by 10px to 54x54px with matching 22px icons and 74px right gutter
+- 2026-11-19 | **1.12.10** (from 1.12.9) | `+0M +0m +1f` | Fix full-width centering wrappers in Gemini Web DOM
+  - `fix`: Expand full-width CSS to chat-window, scroller padding, flex/grid stretch, and custom Angular response tags
+- 2026-11-19 | **1.12.9** (from 1.11.4) | `+0M +1m +5f` | 6 precision fixes: below-user-query sticky clamp, zero collapsed gap, open-only rail bounds, inner full-width expansion, 64x64 matching buttons, and smooth full-width toggle animation
+  - `minor`: Add smooth 240ms width-toggle animation for Teks full-width ON/OFF with synchronized rail, sticky button, and scroll-button tracking
+  - `fix`: Clamp sticky Tutup lagi button below user-query prompt so it never overlaps user prompt text
+  - `fix`: Eliminate remaining dark vertical spacing between collapsed Past Chat bars across parent wrappers and scroller row-gap
+  - `fix`: Clamp Left Strip Navigator vertical bounds to open Past Chats only so scrolling up stops at open chats
+  - `fix`: Expand full-width CSS rules to inner Gemini text and composer wrappers using interpolatable max-width 100%
+  - `fix`: Enlarge both Tutup lagi idle circle and scroll-to-bottom button to matching 64x64px with 26px icons and 84px right gutter
+- 2026-11-19 | **1.11.4** (from 1.9.2) | `+0M +2m +2f` | Add Teks full-width toggle, 40px zero-jitter recollapse circle, 48px textOpt-synced collapsed bars, and dynamic left strip clamping
+  - `minor`: Add Teks full-width toggle inside Optimisasi Teks accordion (default ON, preserved on typography reset) gating full-width chat and composer layout
+  - `minor`: Clamp Left Strip Navigator dynamically across chat text vertical bounds (top, static middle, bottom) while hugging left text edge
+  - `fix`: Enlarge recollapse circle to 40px and eliminate middle-scroll jitter via 3-mode hybrid fixed/absolute portal
+  - `fix`: Enlarge collapsed Past Chat bar to 48px min-height and sync its typography with active Text Optimization settings
+- 2026-11-19 | **1.9.2** (from 0.5.0) | `+1M +4m +2f` | Major v1 update: Text Optimization, Past Chat UX, Full-Width Layout, Dynamic Sticky Recollapse, Scroll-to-Bottom Button, and Zero-Gap/Dedupe Fixes
+  - `major`: Overhaul settings schema and Popup UX to Past Chat v1.0 (always-on Light Render and Animations, openPastChats replacing openTurnLimit)
+  - `minor`: Add Text Optimization controls in Popup accordion (font family, font size, line height, paragraph gap, letter spacing, reset) with code/table isolation
+  - `minor`: Support fillable openPastChats (0+) hidden when auto-collapse is off, plus dynamic sticky "Tutup lagi" pill with hover icon-slide
+  - `minor`: Add always-on full-width chat/composer layout and smooth rAF sidebar tracking for Left Strip Navigator
+  - `minor`: Add left-aligned circular "Ke Bawah" button above composer matching Gemini UI and hiding duplicate native button
+  - `fix`: Eliminate ghost gaps between collapsed Past Chat bars by resetting content-visibility and container margins/padding
+  - `fix`: Strip visually-hidden nodes and deduplicate repeated prompt text in collapsed bars and tooltips
+- 2026-11-18 | **0.5.0** (from 0.0.0) | `+0M +5m +0f` | Initial build of Gemini Web Optimizer MV3 Extension
+  - `minor`: Auto-collapse old conversation turns (keep latest 2/4/8 open) with content-visibility:auto, collapsed bars, and "Tutup lagi" re-collapse
+  - `minor`: Master toggle to hide Gemini inline citations, Sources panels, and attribution badges while preserving Drive/Gmail result cards, Markdown links, and Show thinking
+  - `minor`: Left horizontal strip navigator with 1:1 scrollable rail, GPU-only hover magnification wave, unclipped tooltip portal, auto-expand jump, and scroll-spy
+  - `minor`: 3-state Light Render Mode (Auto at 10+ turns, On, Off) disabling heavy streaming animations and backdrop-blur
+  - `minor`: Adaptive Gemini-Native Popup control center with live stats, animations toggle, and 2x2 quick actions (Expand All, Collapse Old, Top, Bottom)
