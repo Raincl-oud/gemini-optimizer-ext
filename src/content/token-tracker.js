@@ -498,12 +498,12 @@
     sep2.setAttribute('aria-hidden', 'true');
     const weekEl = el('span', 'gopt-tk-week', 'Week 100% left');
 
-    bar.appendChild(meter);
     bar.appendChild(ctxEl);
     bar.appendChild(sep1);
     bar.appendChild(dayEl);
     bar.appendChild(sep2);
     bar.appendChild(weekEl);
+    bar.appendChild(meter);
 
     const tip = el('div', 'gopt-tooltip gopt-token-tooltip');
     tip.id = 'gopt-token-tooltip';
@@ -750,7 +750,9 @@
     const vw = root.innerWidth || 1200;
     const vh = root.innerHeight || 800;
     const anchor = Svc ? Svc.findComposerAnchor(S.doc) : null;
-    const box = anchor && anchor.querySelector ? (anchor.querySelector('.text-input-field, rich-textarea') || anchor) : anchor;
+    const box = anchor && anchor.querySelector
+      ? (anchor.querySelector('.text-input-field') || anchor.querySelector('rich-textarea') || anchor)
+      : anchor;
     const br = box && box.getBoundingClientRect ? box.getBoundingClientRect() : null;
     const cr = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
     const mainEl = Svc ? (Svc.findChatScroller(S.doc) || Svc.queryFirst(S.doc, Svc.SEL.mainArea)) : null;

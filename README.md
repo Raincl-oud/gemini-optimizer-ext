@@ -7,7 +7,7 @@
 **Keep long Google Gemini conversations fast, readable, and clutter-free without breaking Angular or native controls.**
 
 [![CI](https://github.com/Raincl-oud/gemini-optimizer-ext/actions/workflows/ci.yml/badge.svg)](https://github.com/Raincl-oud/gemini-optimizer-ext/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-1.25.24-0b57d0?style=flat)](VERSION.md)
+[![Version](https://img.shields.io/badge/version-1.25.26-0b57d0?style=flat)](VERSION.md)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-0b57d0?style=flat)](manifest.json)
 [![Browsers](https://img.shields.io/badge/browsers-Chromium%20Based%20Browsers-334155?style=flat)](#installation)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-16a34a?style=flat)](#development--testing)

@@ -1,8 +1,12 @@
 # Version Tracker
 
-Current: **1.25.24**
+Current: **1.25.26**
 
 ## History
+- 2026-11-19 | **1.25.26** (from 1.25.25) | `+0M +0m +1f` | Increase Token Usage meter bar height to 10px
+  - `fix`: Increase Token Usage progress meter height by 5px to 10px
+- 2026-11-19 | **1.25.25** (from 1.25.24) | `+0M +0m +1f` | Left-align Token Usage text and stretch 5px bar across right width
+  - `fix`: Left-align Token Usage text, widen progress bar +2px to 5px, and stretch meter edge-to-edge on the right matching composer width
 - 2026-11-19 | **1.25.24** (from 1.25.23) | `+0M +0m +1f` | Fix TokenTracker crash caused by unexported Selectors.isVisible
   - `fix`: Export isVisible from GeminiOptSelectors so TokenTracker.scanDomSignals no longer throws TypeError on live Gemini pages
 - 2026-11-19 | **1.25.23** (from 1.25.20) | `+0M +0m +3f` | Fix Token Usage bar bottom placement, disclaimer hiding, and sidebar Pro badge detection

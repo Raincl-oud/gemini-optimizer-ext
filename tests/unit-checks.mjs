@@ -913,7 +913,8 @@ check('token-tracker: snapshot thresholds, limit banner, selectors & CSS/main co
   assert.ok(overlay.includes('--gopt-warn') && overlay.includes('--gopt-crit'));
   assert.ok(/html\.gopt-active\.gopt-token-bar-active/.test(overlay) && /visibility:\s*hidden !important/.test(overlay));
   assert.ok(overlay.includes('.disclaimer-container'));
-  assert.ok(/\.gopt-token-bar\s*\{[^}]*bottom:\s*4px;[^}]*z-index:\s*2147482900;/s.test(overlay));
+  assert.ok(/\.gopt-token-bar\s*\{[^}]*bottom:\s*4px;[^}]*z-index:\s*2147482900;[^}]*justify-content:\s*flex-start;/s.test(overlay));
+  assert.ok(/\.gopt-tk-meter\s*\{[^}]*flex:\s*1 1 64px;[^}]*height:\s*10px;/s.test(overlay));
   assert.ok(/\.gopt-tk-fill\s*\{/.test(overlay) && /\.gopt-token-tooltip\s*\{/.test(overlay));
 
   const tkSrc = read('src', 'content', 'token-tracker.js');
@@ -984,7 +985,7 @@ check('token-tracker: end-to-end mount + update against real Selectors renders v
   };
   const composerBox = { getBoundingClientRect: () => ({ left: 260, top: 700, width: 731, height: 56, bottom: 756 }) };
   const composerAnchor = {
-    querySelector: (s) => (s.includes('rich-textarea') ? composerBox : null),
+    querySelector: (s) => (s.includes('.text-input-field') || s.includes('rich-textarea') ? composerBox : null),
     getBoundingClientRect: () => ({ left: 216, top: 700, width: 849, height: 56, bottom: 756 })
   };
   const mockDoc = {
@@ -1040,6 +1041,7 @@ check('token-tracker: end-to-end mount + update against real Selectors renders v
     assert.equal(bar.style.top, '');
     const ctxSpan = bar.children.find((c) => c.className === 'gopt-tk-ctx');
     assert.ok(ctxSpan && ctxSpan.textContent.includes('/ 1M'), 'auto-detected AI Pro 1M cap: ' + (ctxSpan && ctxSpan.textContent));
+    assert.equal(bar.children[bar.children.length - 1].className, 'gopt-tk-meter', 'meter sits on right edge after left-aligned text');
     TokenTracker.destroy();
   } finally {
     globalThis.GeminiOptSelectors = prevSel;

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gemini Web Optimizer",
-  "version": "1.25.24",
+  "version": "1.25.26",
   "description": "Wrap long chats, navigate faster, customize typography, and hide source clutter on Gemini Web.",
   "permissions": ["storage", "tabs"],
   "host_permissions": ["https://gemini.google.com/*"],
