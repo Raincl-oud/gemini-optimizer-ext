@@ -8,6 +8,7 @@
   const Selectors = window.GeminiOptSelectors;
   const Collapse = window.GeminiOptCollapse;
   const Navigator = window.GeminiOptNavigator;
+  const Folders = window.GeminiOptFolders;
   const TokenTracker = window.GeminiOptTokenTracker;
   const Early = window.GeminiOptEarly;
   if (!Settings || !Selectors || !Collapse || !Navigator) {
@@ -187,6 +188,7 @@
     toggle('gopt-light-render', true);
     toggle('gopt-hide-sources', state.settings.hideSources);
     toggle('gopt-lite-latex', !!state.settings.liteLatex);
+    toggle('gopt-folders-active', state.settings.showFolders !== false);
     toggle('gopt-dark', Selectors.detectTheme(document) === 'dark');
     applyTextOpt();
   }
@@ -601,6 +603,7 @@
     if (state.scrollBtn) state.scrollBtn.classList.remove('is-visible');
     Collapse.reset();
     Navigator.reset();
+    if (Folders) Folders.updateRoute(location.href);
     if (TokenTracker) TokenTracker.resetRoute();
     attachToChat();
   }
@@ -641,6 +644,7 @@
     attachScrollShield(null);
     state.latexHeavy = false;
     toggle('gopt-latex-heavy', false);
+    toggle('gopt-folders-active', false);
     if (state.observer) { state.observer.disconnect(); state.observer = null; }
     if (state.themeObserver) { state.themeObserver.disconnect(); state.themeObserver = null; }
     if (state.scrollBtnRo) { state.scrollBtnRo.disconnect(); state.scrollBtnRo = null; }
@@ -655,6 +659,7 @@
     if (state.scrollBtnTrackRaf) { cancelAnimationFrame(state.scrollBtnTrackRaf); state.scrollBtnTrackRaf = 0; }
     Collapse.reset();
     Navigator.destroy();
+    if (Folders) Folders.destroy();
     if (TokenTracker) TokenTracker.destroy();
   }
 
@@ -733,6 +738,10 @@
     syncEarlyMirror();
     applyRootClasses();
     Navigator.mount(document);
+    if (Folders) {
+      Folders.setEnabled(state.settings.showFolders !== false);
+      Folders.mount(document);
+    }
     if (TokenTracker) {
       if (typeof TokenTracker.setScrollStateProvider === 'function') {
         TokenTracker.setScrollStateProvider(function () { return state.scrolling; }, onScrollIdle);
@@ -765,6 +774,7 @@
       state.settings = next;
       syncEarlyMirror();
       applyRootClasses();
+      if (Folders) Folders.setEnabled(next.showFolders !== false);
       if (TokenTracker) TokenTracker.setEnabled(next.showTokenUsage !== false);
       refreshNow();
       if (fullChanged) {

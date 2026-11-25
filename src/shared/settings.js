@@ -26,6 +26,7 @@
     hideSources: true,
     showTokenUsage: true,
     liteLatex: false,
+    showFolders: true,
     textOpt: DEFAULT_TEXT_OPT
   });
 
@@ -84,6 +85,7 @@
       hideSources: bool(r.hideSources, d.hideSources),
       showTokenUsage: bool(r.showTokenUsage, d.showTokenUsage),
       liteLatex: bool(r.liteLatex, d.liteLatex),
+      showFolders: bool(r.showFolders, d.showFolders),
       textOpt: normalizeTextOpt(r.textOpt)
     };
   }

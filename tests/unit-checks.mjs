@@ -34,6 +34,7 @@ const Settings = require('../src/shared/settings.js');
 const Selectors = require('../src/shared/selectors.js');
 const Collapse = require('../src/content/collapse-manager.js');
 const Nav = require('../src/content/strip-navigator.js');
+const Folders = require('../src/content/folder-manager.js');
 const Early = require('../src/content/early-boot.js');
 const TokenTracker = require('../src/content/token-tracker.js');
 const UsageSync = require('../src/background/usage-sync.js');
@@ -51,12 +52,14 @@ check('settings: contentWidth defaults, fullWidth & DEFAULT_TYPOGRAPHY_RESET', (
     fullWidth: true, contentWidth: 100, fontFamily: 'default', fontSize: null, lineHeight: null, paragraphGap: null, letterSpacing: null
   });
   assert.deepEqual(Settings.DEFAULT_SETTINGS, {
-    autoCollapse: true, openPastChats: 4, hideSources: true, showTokenUsage: true, liteLatex: false, textOpt: Settings.DEFAULT_TEXT_OPT
+    autoCollapse: true, openPastChats: 4, hideSources: true, showTokenUsage: true, liteLatex: false, showFolders: true, textOpt: Settings.DEFAULT_TEXT_OPT
   });
   assert.equal(Settings.normalizeSettings({ showTokenUsage: false }).showTokenUsage, false);
   assert.equal(Settings.normalizeSettings({ showTokenUsage: 'no' }).showTokenUsage, true);
   assert.equal(Settings.normalizeSettings({ liteLatex: true }).liteLatex, true);
   assert.equal(Settings.normalizeSettings({ liteLatex: 'yes' }).liteLatex, false);
+  assert.equal(Settings.normalizeSettings({ showFolders: false }).showFolders, false);
+  assert.equal(Settings.normalizeSettings({ showFolders: 'no' }).showFolders, true);
   assert.equal(Settings.resolveLightRenderActive, undefined);
   assert.equal(Settings.OPEN_TURN_LIMITS, undefined);
 });
@@ -550,6 +553,7 @@ check('guardrails: popup English UI, crisp logo, contentWidth slider, no preview
   assert.ok(popupHtml.includes('id="openPastChats-wrap"') && popupHtml.includes('acc-collapse'));
   assert.ok(popupHtml.includes('id="showTokenUsage"') && popupHtml.includes('Token Usage') && popupHtml.includes('official 5h/weekly usage'));
   assert.ok(popupHtml.includes('id="liteLatex"') && popupHtml.includes('Lite LaTeX Render') && popupHtml.includes('aria-checked="false"'));
+  assert.ok(popupHtml.includes('id="showFolders"') && popupHtml.includes('Conversation Folders') && popupHtml.includes('aria-checked="true"'));
   assert.ok(popupHtml.includes('id="textFullWidth"') && popupHtml.includes('Full Width'));
   assert.ok(popupHtml.includes('id="contentWidth-wrap"') && popupHtml.includes('id="contentWidth"') && popupHtml.includes('min="60" max="100"'));
   assert.ok(popupHtml.includes('id="textOpt-panel"') && popupHtml.includes('id="resetTextOpt"') && popupHtml.includes('Reset Typography'));
@@ -1876,6 +1880,560 @@ check('selectors & 60fps LaTeX CSS/JS contracts: KaTeX skip, virtualization, lig
   assert.ok(!mainSrc.includes('gopt-has-scroll-bottom'), 'dead gopt-has-scroll-bottom removed');
   assert.ok(mainSrc.includes('data-gopt-scrolling') && mainSrc.includes('LATEX_HEAVY_THRESHOLD = 50'));
   assert.ok(mainSrc.includes('gopt-latex-heavy') && mainSrc.includes('scrollBtnPosDirty') && mainSrc.includes('gopt-lite-latex'));
+});
+
+// ---------- Conversation Folders (LR26 Sidebar) ----------
+check('selectors: LR26 conversation helpers, normalizeConvId & ligature-free extractConvTitle', () => {
+  for (const key of ['sidenavHistoryContainer', 'sidenavScroller', 'notebookSection', 'chatsSection', 'sidenavConvItem', 'sidenavConvTitle']) {
+    assert.ok(Array.isArray(Selectors.SEL[key]) && Selectors.SEL[key].length > 0, 'missing SEL.' + key);
+  }
+  assert.equal(Selectors.normalizeConvId('c_8f3a1b2c9d'), '8f3a1b2c9d');
+  assert.equal(Selectors.normalizeConvId('https://gemini.google.com/u/0/app/c_8f3a1b2c9d?hl=en#sec'), '8f3a1b2c9d');
+  assert.equal(Selectors.normalizeConvId('/app/abc_123-xyz'), 'abc_123-xyz');
+  assert.equal(Selectors.normalizeConvId('/usage'), '');
+  assert.equal(Selectors.normalizeConvId('/gems/mygem'), '');
+  assert.equal(Selectors.normalizeConvId('/app'), '');
+  assert.equal(Selectors.normalizeConvId(null), '');
+
+  assert.equal(Selectors.extractConvIdFromUrl('https://gemini.google.com/app/c_abcdef1234?hl=en'), 'abcdef1234');
+  assert.equal(Selectors.extractConvIdFromUrl('https://gemini.google.com/usage'), '');
+  assert.equal(Selectors.extractConvIdFromUrl('https://gemini.google.com/app'), '');
+
+  assert.equal(Selectors.extractConvIdFromItem({ getAttribute: (k) => (k === 'data-conversation-id' ? 'c_112233aa' : null) }), '112233aa');
+  assert.equal(Selectors.extractConvIdFromItem({ getAttribute: () => null, querySelector: () => ({ getAttribute: (k) => (k === 'href' ? '/app/445566bb' : null) }) }), '445566bb');
+
+  // extractConvTitle must preserve root row text even with role="button" while skipping mat-icon / nested [role="button"] / actions
+  const txtNode = (v) => ({ nodeType: 3, nodeValue: v });
+  const elemNode = (tag, attrs = {}, children = []) => ({
+    nodeType: 1, tagName: tag.toUpperCase(),
+    childNodes: children,
+    hasAttribute: (k) => k in attrs,
+    getAttribute: (k) => (k in attrs ? attrs[k] : null)
+  });
+  const rootRoleButtonRow = {
+    getAttribute: (k) => (k === 'role' ? 'button' : null),
+    querySelector: () => null,
+    nodeType: 1, tagName: 'GEM-NAV-LIST-ITEM',
+    childNodes: [
+      elemNode('div', { class: 'conversation-title', role: 'button' }, [txtNode('Quantum '), txtNode('Mechanics')]),
+      elemNode('mat-icon', { class: 'mat-icon' }, [txtNode('push_pin')]),
+      elemNode('span', { 'aria-hidden': 'true' }, [txtNode('keep')]),
+      elemNode('button', { 'aria-label': 'More' }, [elemNode('mat-icon', {}, [txtNode('more_vert')])]),
+      elemNode('div', { role: 'button', 'aria-label': 'Pin' }, [txtNode('more_vert')]),
+      elemNode('div', { 'data-gopt-owned': '' }, [txtNode('FolderBadge')])
+    ]
+  };
+  // Even when queryFirst picks .conversation-title with role="button", title text is preserved cleanly without more_vert/push_pin!
+  const withNestedTitle = Object.assign({}, rootRoleButtonRow, {
+    querySelector: (s) => (s === '.conversation-title' ? rootRoleButtonRow.childNodes[0] : null)
+  });
+  assert.equal(Selectors.extractConvTitle(rootRoleButtonRow), 'Quantum Mechanics');
+  assert.equal(Selectors.extractConvTitle(withNestedTitle), 'Quantum Mechanics');
+
+  const selSrc = read('src', 'shared', 'selectors.js');
+  const folderSrc = read('src', 'content', 'folder-manager.js');
+  assert.ok(!/\.innerText\b/.test(selSrc) && !/\.innerText\b/.test(folderSrc), 'no layout-forcing .innerText');
+});
+
+check('folder-manager: pure reducers, 1-convo-1-folder Move semantics & orphan cleanup', () => {
+  assert.equal(Folders.STORAGE_KEY, 'goptFolders');
+  assert.deepEqual(Folders.FOLDER_COLORS, ['slate', 'blue', 'teal', 'amber', 'rose', 'violet']);
+  assert.equal(Folders.MAX_NAME_LEN, 48);
+  assert.equal(Folders.DELETE_CONFIRM_MS, 4000);
+
+  // Corrupted input resilience & invariant enforcement (dedup convIds across folders + prune orphan convs)
+  const messy = Folders.normalizeFolderStore({
+    sectionCollapsed: 'yes',
+    folders: [
+      { id: 'f1', name: '  Work   Projects  ', color: 'blue', collapsed: false, convIds: ['c_aaa111', '/app/bbb222', 'aaa111'] },
+      { id: 'f1', name: 'DupId', color: 'rose', convIds: ['ccc333'] },
+      { id: 'f2', name: 'X'.repeat(80), color: 'neon', convIds: ['aaa111', 'ccc333', '/usage'] }
+    ],
+    convs: {
+      aaa111: { title: 'My Work Chat' },
+      bbb222: { title: '' },
+      orphan99: { title: 'Should be pruned' }
+    }
+  });
+  assert.equal(messy.folders.length, 2);
+  assert.equal(messy.folders[0].name, 'Work Projects');
+  assert.equal(messy.folders[1].name.length, 48);
+  assert.equal(messy.folders[1].color, 'slate');
+  assert.deepEqual(messy.folders[0].convIds, ['aaa111', 'bbb222']);
+  assert.deepEqual(messy.folders[1].convIds, ['ccc333'], 'strict 1 convo = 1 folder across normalization');
+  assert.equal(messy.convs.orphan99, undefined, 'unreferenced convs pruned');
+  assert.equal(messy.convs.bbb222.title, 'Untitled chat');
+
+  // Create, rename, color, toggle, Move semantics & delete cleanup
+  let st = Folders.createFolder(null, { id: 'f_work', name: 'Work', color: 'teal', now: 1000 });
+  st = Folders.createFolder(st, { id: 'f_study', name: 'Study', color: 'violet', now: 1001 });
+  st = Folders.createFolder(st, { name: '   ' });
+  assert.equal(st.folders.length, 2);
+
+  st = Folders.assignConvToFolder(st, { folderId: 'f_work', convId: 'c_chat001', title: 'Linear Algebra', now: 2000 });
+  assert.equal(Folders.findFolderForConv(st, 'chat001').id, 'f_work');
+  assert.ok(Folders.getAssignedConvSet(st).has('chat001'));
+
+  // Move to Study -> removed from Work, present only in Study
+  st = Folders.assignConvToFolder(st, { folderId: 'f_study', convId: '/app/chat001', now: 2100 });
+  assert.deepEqual(st.folders[0].convIds, []);
+  assert.deepEqual(st.folders[1].convIds, ['chat001']);
+  assert.equal(st.convs.chat001.title, 'Linear Algebra', 'preserves existing title when move omits title');
+
+  // syncConvTitles updates live sidebar titles and ignores Untitled chat
+  const synced = Folders.syncConvTitles(st, {
+    chat001: { title: 'Linear Algebra II', url: 'https://gemini.google.com/app/chat001' }
+  });
+  assert.equal(synced.changed, true);
+  assert.equal(synced.store.convs.chat001.title, 'Linear Algebra II');
+  assert.equal(Folders.syncConvTitles(synced.store, { chat001: { title: 'Untitled chat' } }).changed, false);
+
+  st = Folders.renameFolder(synced.store, 'f_study', 'Math Research');
+  assert.equal(st.folders[1].name, 'Math Research');
+  st = Folders.setFolderColor(st, 'f_study', 'amber');
+  assert.equal(st.folders[1].color, 'amber');
+  assert.equal(Folders.isCustomColor('#FF33AA'), true);
+  assert.equal(Folders.isCustomColor('amber'), false);
+  assert.equal(Folders.isCustomColor('#123'), false);
+  st = Folders.setFolderColor(st, 'f_study', '#FF33AA');
+  assert.equal(st.folders[1].color, '#ff33aa', 'normalizes valid 6-digit custom hex color');
+  st = Folders.setFolderColor(st, 'f_study', 'not-a-color');
+  assert.equal(st.folders[1].color, '#ff33aa', 'ignores invalid color string');
+  st = Folders.toggleFolderCollapsed(st, 'f_study');
+  assert.equal(st.folders[1].collapsed, true);
+  st = Folders.toggleSectionCollapsed(st);
+  assert.equal(st.sectionCollapsed, true);
+
+  st = Folders.deleteFolder(st, 'f_study');
+  assert.equal(st.folders.length, 1);
+  assert.equal(st.convs.chat001, undefined, 'deleting folder prunes unreferenced conv metadata');
+
+  st = Folders.assignConvToFolder(st, { folderId: 'f_work', convId: 'chat002', title: 'Doc Q&A', now: 3000 });
+  st = Folders.removeConvFromFolders(st, 'c_chat002');
+  assert.equal(st.folders[0].convIds.length, 0);
+  assert.equal(st.convs.chat002, undefined);
+});
+
+check('folder-manager: LR26 DOM injection (Notebook vs chatsSection fallback), 1/2-click delete, SPA nav & destroy', () => {
+  const prevSel = globalThis.GeminiOptSelectors;
+  const prevChrome = globalThis.chrome;
+  const prevLoc = globalThis.location;
+  const prevSetTo = globalThis.setTimeout;
+  const prevClrTo = globalThis.clearTimeout;
+  const prevW = globalThis.innerWidth;
+  const prevH = globalThis.innerHeight;
+
+  function makeDomNode(tag, attrs = {}) {
+    const classSet = new Set(String(attrs.class || '').split(/\s+/).filter(Boolean));
+    const attrMap = { ...attrs };
+    const listeners = {};
+    let ownText = '';
+    const el = {
+      nodeType: 1,
+      tagName: tag.toUpperCase(),
+      childNodes: [],
+      children: [],
+      parentNode: null,
+      parentElement: null,
+      style: {},
+      get textContent() {
+        if (el.childNodes.length === 0) return ownText;
+        return el.childNodes.map((c) => (c.nodeType === 3 ? (c.nodeValue || '') : (c.textContent || ''))).join('');
+      },
+      set textContent(v) {
+        ownText = String(v === undefined || v === null ? '' : v);
+        while (el.childNodes.length) el.removeChild(el.childNodes[0]);
+      },
+      value: '',
+      hidden: false,
+      inert: false,
+      get className() { return Array.from(classSet).join(' '); },
+      set className(v) { classSet.clear(); String(v || '').split(/\s+/).filter(Boolean).forEach((c) => classSet.add(c)); },
+      classList: {
+        add: (...c) => c.forEach((x) => classSet.add(x)),
+        remove: (...c) => c.forEach((x) => classSet.delete(x)),
+        contains: (c) => classSet.has(c),
+        toggle: (c, on) => { const n = on === undefined ? !classSet.has(c) : !!on; if (n) classSet.add(c); else classSet.delete(c); return n; }
+      },
+      hasAttribute: (k) => (k === 'class' ? classSet.size > 0 : k in attrMap),
+      getAttribute: (k) => (k === 'class' ? Array.from(classSet).join(' ') : (k in attrMap ? attrMap[k] : null)),
+      setAttribute: (k, v) => { attrMap[k] = String(v); if (k === 'class') el.className = v; },
+      removeAttribute: (k) => { delete attrMap[k]; },
+      appendChild(c) {
+        if (c.parentNode) c.remove();
+        c.parentNode = el; c.parentElement = el;
+        el.childNodes.push(c); el.children.push(c);
+        return c;
+      },
+      insertBefore(c, ref) {
+        if (c.parentNode) c.remove();
+        c.parentNode = el; c.parentElement = el;
+        const idx = ref ? el.childNodes.indexOf(ref) : -1;
+        if (idx >= 0) { el.childNodes.splice(idx, 0, c); el.children.splice(idx, 0, c); }
+        else { el.childNodes.push(c); el.children.push(c); }
+        return c;
+      },
+      removeChild(c) {
+        const i = el.childNodes.indexOf(c);
+        if (i >= 0) { el.childNodes.splice(i, 1); el.children.splice(i, 1); }
+        c.parentNode = null; c.parentElement = null;
+        return c;
+      },
+      remove() { if (el.parentNode) el.parentNode.removeChild(el); },
+      get firstChild() { return el.childNodes[0] || null; },
+      get nextSibling() {
+        if (!el.parentNode) return null;
+        const i = el.parentNode.childNodes.indexOf(el);
+        return i >= 0 ? (el.parentNode.childNodes[i + 1] || null) : null;
+      },
+      get isConnected() {
+        let cur = el;
+        while (cur) { if (cur === docRoot) return true; cur = cur.parentNode; }
+        return false;
+      },
+      matches(sel) {
+        return sel.split(',').some((part) => {
+          const p = part.trim();
+          if (p.includes('.gopt-conv-folder-btn')) return classSet.has('gopt-conv-folder-btn');
+          if (p.includes('.gopt-folder-picker')) return classSet.has('gopt-folder-picker');
+          if (p.includes('.gopt-folder-menu')) return classSet.has('gopt-folder-menu');
+          if (p.includes('[data-gopt-owned]')) return 'data-gopt-owned' in attrMap;
+          if (p.includes('gem-nav-list-item') && el.tagName === 'GEM-NAV-LIST-ITEM' && attrMap['data-test-id'] === 'conversation') return true;
+          if (p === 'expandable-section') return el.tagName === 'EXPANDABLE-SECTION';
+          return false;
+        });
+      },
+      closest(sel) {
+        let cur = el;
+        while (cur) { if (cur.matches && cur.matches(sel)) return cur; cur = cur.parentNode; }
+        return null;
+      },
+      querySelectorAll(sel) {
+        const out = [];
+        const walkTree = (n) => {
+          for (const ch of n.childNodes) {
+            if (ch.nodeType !== 1) continue;
+            if (sel === 'gem-nav-list-item[data-test-id="conversation"]' && ch.tagName === 'GEM-NAV-LIST-ITEM' && ch.getAttribute('data-test-id') === 'conversation') out.push(ch);
+            else if (sel === 'expandable-section' && ch.tagName === 'EXPANDABLE-SECTION') out.push(ch);
+            else if (sel.includes('.gopt-') && ch.classList.contains(sel.slice(1))) out.push(ch);
+            walkTree(ch);
+          }
+        };
+        walkTree(el);
+        return out;
+      },
+      querySelector(sel) {
+        if (sel.includes('a[href*="/app/"]')) {
+          const walkA = (n) => {
+            for (const ch of n.childNodes) {
+              if (ch.nodeType === 1 && ch.tagName === 'A') return ch;
+              if (ch.nodeType === 1) { const r = walkA(ch); if (r) return r; }
+            }
+            return null;
+          };
+          const a = walkA(el);
+          if (a) return a;
+        }
+        if (sel.includes('side-navigation-content expandable-section')) return hasNotebook ? notebookSec : null;
+        if (sel.includes('chats-expandable-section')) return chatsSec;
+        if (sel.includes('infinite-scroller')) return scroller;
+        if (sel.includes('side-navigation-v2') || sel.includes('bard-sidenav')) return sidenav;
+        if (sel.includes('user-query')) return null;
+        if (sel.includes('.conversation-title')) return el.childNodes.find((c) => c.classList && c.classList.contains('conversation-title')) || null;
+        return null;
+      },
+      addEventListener(ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); },
+      removeEventListener(ev, fn) { if (listeners[ev]) listeners[ev] = listeners[ev].filter((f) => f !== fn); },
+      _emit(ev, payload = {}) { for (const fn of (listeners[ev] || []).slice()) fn({ target: el, preventDefault() {}, stopPropagation() {}, ...payload }); },
+      getBoundingClientRect: () => ({ left: 12, top: 220, right: 260, bottom: 256, width: 248, height: 36 }),
+      _attrs: attrMap,
+      _listeners: listeners
+    };
+    return el;
+  }
+
+  const docRoot = makeDomNode('html');
+  const body = makeDomNode('body');
+  docRoot.appendChild(body);
+  const sidenav = makeDomNode('side-navigation-v2');
+  const scroller = makeDomNode('infinite-scroller');
+  const navList = makeDomNode('mat-nav-list');
+  const notebookSec = makeDomNode('expandable-section', { 'data-test-id': 'notebook-section' });
+  const chatsSec = makeDomNode('expandable-section', { 'data-test-id': 'chats-expandable-section' });
+  let hasNotebook = true;
+
+  let spaClicked = 0;
+  const item1 = makeDomNode('gem-nav-list-item', { 'data-test-id': 'conversation', 'data-conversation-id': 'c_conv001' });
+  const link1 = makeDomNode('a', { href: '/app/conv001' });
+  link1.click = () => { spaClicked++; };
+  const title1 = makeDomNode('div', { class: 'conversation-title' });
+  title1.textContent = 'Folder Test Chat';
+  link1.appendChild(title1);
+  item1.appendChild(link1);
+  chatsSec.appendChild(item1);
+
+  scroller.appendChild(navList);
+  scroller.appendChild(notebookSec);
+  scroller.appendChild(chatsSec);
+  sidenav.appendChild(scroller);
+  body.appendChild(sidenav);
+
+  const mockDoc = {
+    documentElement: docRoot,
+    body,
+    title: 'Gemini',
+    createElement: (tag) => makeDomNode(tag),
+    querySelector: (s) => scroller.querySelector(s) || sidenav.querySelector(s),
+    querySelectorAll: (s) => sidenav.querySelectorAll(s),
+    addEventListener: (ev, fn) => docRoot.addEventListener(ev, fn),
+    removeEventListener: (ev, fn) => docRoot.removeEventListener(ev, fn)
+  };
+
+  const memLocal = {};
+  let storageChangedCb = null;
+  const fakeTimers = new Map();
+  let tid = 1;
+  const assignedUrls = [];
+
+  try {
+    globalThis.GeminiOptSelectors = Selectors;
+    globalThis.location = { href: 'https://gemini.google.com/app/conv001', assign: (u) => assignedUrls.push(u) };
+    globalThis.setTimeout = (fn, ms) => { const id = tid++; fakeTimers.set(id, { fn, ms }); return id; };
+    globalThis.clearTimeout = (id) => { fakeTimers.delete(id); };
+    globalThis.innerWidth = 1280;
+    globalThis.innerHeight = 800;
+    globalThis.chrome = {
+      runtime: { lastError: null },
+      storage: {
+        local: {
+          get: (k, cb) => cb({ [k]: memLocal[k] }),
+          set: (o, cb) => { Object.assign(memLocal, o); if (cb) cb(); }
+        },
+        onChanged: {
+          addListener: (fn) => { storageChangedCb = fn; },
+          removeListener: () => { storageChangedCb = null; }
+        }
+      }
+    };
+
+    Folders.setEnabled(true);
+    Folders.mount(mockDoc);
+
+    // Mounted right before Notebook section with divider!
+    const secIdx = scroller.childNodes.findIndex((n) => n.classList.contains('gopt-folders-section'));
+    const divIdx = scroller.childNodes.findIndex((n) => n.classList.contains('gopt-folders-divider'));
+    const nbIdx = scroller.childNodes.indexOf(notebookSec);
+    assert.ok(secIdx >= 0 && divIdx === secIdx + 1 && nbIdx === divIdx + 1, 'injected section + divider directly before Notebook');
+
+    // Create empty folder via composer Enter & delete in 1 click; create non-empty folder & verify 2-click delete
+    const secEl = scroller.childNodes[secIdx];
+    const addBtn = secEl.querySelectorAll('.gopt-folder-add-btn')[0];
+    addBtn._emit('click');
+    const compInput = secEl.querySelectorAll('.gopt-folder-input')[0];
+    compInput.value = 'TempEmpty';
+    compInput._emit('keydown', { key: 'Enter' });
+    for (const [, t] of fakeTimers) t.fn();
+    fakeTimers.clear();
+    assert.equal(memLocal[Folders.STORAGE_KEY].folders.length, 1);
+
+    // 1-click immediate delete when folder is empty; also verify zero count badges, menu order (Rename -> Delete -> Colors) & custom swatch last
+    assert.equal(secEl.querySelectorAll('.gopt-folders-count').length, 0, 'no folder count badge in header');
+    assert.equal(secEl.querySelectorAll('.gopt-folder-badge').length, 0, 'no convo count badge on folder row');
+    const compSwatches = secEl.querySelectorAll('.gopt-color-dots')[0];
+    assert.equal(compSwatches.childNodes.length, Folders.FOLDER_COLORS.length + 1);
+    assert.ok(compSwatches.childNodes[compSwatches.childNodes.length - 1].classList.contains('gopt-color-custom'), 'custom color is last choice in composer');
+
+    const menuBtn1 = secEl.querySelectorAll('.gopt-folder-menu-btn')[0];
+    menuBtn1._emit('click');
+    const menuEl = body.childNodes.find((n) => n.classList.contains('gopt-folder-menu'));
+    assert.equal(menuEl.childNodes.length, 3, 'menu has Rename, Delete, Colors');
+    assert.equal(menuEl.childNodes[0].textContent, 'Rename', '1st menu item is Rename');
+    assert.equal(menuEl.childNodes[1].textContent, 'Delete', '2nd menu item is Delete');
+    assert.ok(menuEl.childNodes[2].classList.contains('gopt-menu-colors'), '3rd menu item is Color picker');
+    const menuColors = menuEl.childNodes[2];
+    const customSwatch = menuColors.childNodes[menuColors.childNodes.length - 1];
+    assert.ok(customSwatch.classList.contains('gopt-color-custom'), 'custom color is last choice in 3-dot menu');
+    const customInput = customSwatch.querySelectorAll('.gopt-color-native')[0];
+    customInput.value = '#12AB89';
+    customInput._emit('input');
+    assert.equal(secEl.querySelectorAll('.gopt-folder-dot')[0].style.backgroundColor, '#12ab89', 'live custom hex applied to folder dot');
+    assert.equal(customSwatch.getAttribute('data-active'), '1');
+
+    const delBtn1 = menuEl.childNodes.find((n) => n.classList && n.classList.contains('is-danger'));
+    delBtn1._emit('click');
+    for (const [, t] of fakeTimers) t.fn();
+    fakeTimers.clear();
+    assert.equal(memLocal[Folders.STORAGE_KEY].folders.length, 0, '1-click deletes empty folder immediately');
+
+    // Hover portal assigns conv001 -> stamps data-gopt-in-folder="1"
+    addBtn._emit('click');
+    compInput.value = 'WorkFolder';
+    compInput._emit('keydown', { key: 'Enter' });
+    sidenav._listeners.pointerover[0]({ target: title1 });
+    const hoverBtn = body.childNodes.find((n) => n.classList.contains('gopt-conv-folder-btn'));
+    assert.equal(hoverBtn.hidden, false);
+    assert.equal(hoverBtn.style.left, '196px');
+    hoverBtn._emit('click');
+    const pickerEl = body.childNodes.find((n) => n.classList.contains('gopt-folder-picker'));
+    const pickItem = pickerEl.querySelectorAll('.gopt-picker-item')[0];
+    pickItem._emit('click');
+    for (const [, t] of fakeTimers) t.fn();
+    fakeTimers.clear();
+    assert.equal(item1.getAttribute('data-gopt-in-folder'), '1', 'stamps data-gopt-in-folder="1" on sidebar item');
+
+    // SPA click navigates via native sidebar item click when mounted; falls back to URL when absent
+    const chatLink = secEl.querySelectorAll('.gopt-folder-chat-link')[0];
+    chatLink._emit('click');
+    assert.equal(spaClicked, 1, 'triggers native sidebar click for SPA transition');
+    item1.remove();
+    chatLink._emit('click');
+    assert.equal(assignedUrls[0], 'https://gemini.google.com/app/conv001', 'falls back to URL when item absent');
+    chatsSec.appendChild(item1);
+
+    // 2-click delete confirmation for non-empty folder (4000ms reset)
+    const menuBtn2 = secEl.querySelectorAll('.gopt-folder-menu-btn')[0];
+    menuBtn2._emit('click');
+    let delBtn2 = menuEl.childNodes.find((n) => n.classList && n.classList.contains('is-danger'));
+    delBtn2._emit('click');
+    delBtn2 = menuEl.childNodes.find((n) => n.classList && n.classList.contains('is-danger'));
+    assert.equal(delBtn2.textContent, 'Click again to confirm');
+    // Simulate 4000ms timer expiry resets confirmation
+    const confirmTimer = Array.from(fakeTimers.entries()).find(([, v]) => v.ms === 4000);
+    assert.ok(confirmTimer, 'schedules 4000ms confirm timeout');
+    fakeTimers.delete(confirmTimer[0]);
+    confirmTimer[1].fn();
+    delBtn2 = menuEl.childNodes.find((n) => n.classList && n.classList.contains('is-danger'));
+    assert.equal(delBtn2.textContent, 'Delete', '4000ms timer resets confirmation text');
+
+    // Now perform real 2-click delete
+    delBtn2._emit('click');
+    delBtn2 = menuEl.childNodes.find((n) => n.classList && n.classList.contains('is-danger'));
+    delBtn2._emit('click');
+    for (const [, t] of fakeTimers) t.fn();
+    fakeTimers.clear();
+    assert.equal(memLocal[Folders.STORAGE_KEY].folders.length, 0);
+    assert.equal(item1.getAttribute('data-gopt-in-folder'), null, 'deleting folder clears data-gopt-in-folder');
+
+    // Fallback before chats-expandable-section when Notebook absent + chrome.storage.onChanged cross-tab sync + destroy()
+    hasNotebook = false;
+    notebookSec.remove();
+    storageChangedCb({
+      [Folders.STORAGE_KEY]: {
+        newValue: {
+          version: 1, sectionCollapsed: false,
+          folders: [{ id: 'f_sync', name: 'Synced', color: 'blue', collapsed: false, convIds: ['conv001'] }],
+          convs: { conv001: { id: 'conv001', title: 'Synced Chat', url: 'https://gemini.google.com/app/conv001', updatedAt: 1 } }
+        }
+      }
+    }, 'local');
+    const secIdx2 = scroller.childNodes.findIndex((n) => n.classList.contains('gopt-folders-section'));
+    const chatsIdx = scroller.childNodes.indexOf(chatsSec);
+    assert.ok(secIdx2 >= 0 && chatsIdx === secIdx2 + 2, 'falls back directly before chats-expandable-section');
+    assert.equal(item1.getAttribute('data-gopt-in-folder'), '1');
+
+    // Regression: self-echo & external storage.onChanged while inline Rename / picker "+ New folder" is active must NOT clobber input
+    for (const [, t] of fakeTimers) t.fn();
+    fakeTimers.clear();
+    const syncMenuBtn = secEl.querySelectorAll('.gopt-folder-menu-btn')[0];
+    syncMenuBtn._emit('click');
+    const renMenuBtn = menuEl.childNodes.find((n) => n.textContent === 'Rename');
+    renMenuBtn._emit('click');
+    const renInput = secEl.querySelectorAll('.gopt-folder-rename-input')[0];
+    assert.ok(renInput, 'inline rename input mounted');
+    renInput.value = 'DraftRename';
+
+    const assignCurBtn = secEl.querySelectorAll('.gopt-assign-current-btn')[0];
+    assignCurBtn._emit('click');
+    const pickerNewBtn = pickerEl.querySelectorAll('.gopt-picker-new-btn')[0];
+    pickerNewBtn._emit('click');
+    const pickerInput = pickerEl.querySelectorAll('.gopt-folder-input')[0];
+    assert.ok(pickerInput, 'picker new-folder input mounted');
+    pickerInput.value = 'DraftNewPicker';
+
+    // Fire true self-echo storage event -> exact input nodes & draft values survive
+    const selfEchoPayload = {
+      version: 1, sectionCollapsed: false,
+      folders: [{ id: 'f_sync', name: 'Synced', color: 'blue', collapsed: false, convIds: ['conv001'] }],
+      convs: { conv001: { id: 'conv001', title: 'Folder Test Chat', url: 'https://gemini.google.com/app/conv001', updatedAt: 1 } }
+    };
+    storageChangedCb({ [Folders.STORAGE_KEY]: { newValue: selfEchoPayload } }, 'local');
+    assert.ok(secEl.querySelectorAll('.gopt-folder-rename-input')[0] === renInput, 'self-echo keeps exact rename input node');
+    assert.equal(renInput.value, 'DraftRename');
+    assert.ok(pickerEl.querySelectorAll('.gopt-folder-input')[0] === pickerInput, 'self-echo keeps exact picker input node');
+    assert.equal(pickerInput.value, 'DraftNewPicker');
+
+    // Fire external storage update while inline edits are active -> inputs survive AND Escape restores rendered external update
+    const item2 = makeDomNode('gem-nav-list-item', { 'data-test-id': 'conversation', 'data-conversation-id': 'c_conv002' });
+    const link2 = makeDomNode('a', { href: '/app/conv002' });
+    const title2 = makeDomNode('div', { class: 'conversation-title' });
+    title2.textContent = 'External Chat';
+    link2.appendChild(title2);
+    item2.appendChild(link2);
+    chatsSec.appendChild(item2);
+
+    storageChangedCb({
+      [Folders.STORAGE_KEY]: {
+        newValue: {
+          version: 1, sectionCollapsed: false,
+          folders: [{ id: 'f_ext', name: 'FromOtherTab', color: 'teal', collapsed: false, convIds: ['conv002'] }],
+          convs: { conv002: { id: 'conv002', title: 'External Chat', url: 'https://gemini.google.com/app/conv002', updatedAt: 2 } }
+        }
+      }
+    }, 'local');
+    assert.ok(secEl.querySelectorAll('.gopt-folder-rename-input')[0] === renInput, 'external sync skips rebuilding active rename input');
+    assert.equal(renInput.value, 'DraftRename');
+    assert.ok(pickerEl.querySelectorAll('.gopt-folder-input')[0] === pickerInput, 'external sync skips wiping active picker input');
+    assert.equal(pickerInput.value, 'DraftNewPicker');
+    assert.equal(item2.getAttribute('data-gopt-in-folder'), '1', 'syncConvStamps still stamps new external assignments');
+    assert.equal(item1.getAttribute('data-gopt-in-folder'), null);
+
+    // Committing/canceling inline rename renders the external folder list cleanly
+    renInput._emit('keydown', { key: 'Escape' });
+    assert.equal(secEl.querySelectorAll('.gopt-folder-name')[0].textContent, 'FromOtherTab');
+
+    // Async loadStore race: dirtyStore === true prevents stale storage.get from overwriting local unsaved edits
+    Folders.destroy();
+    let deferredGetCb = null;
+    globalThis.chrome.storage.local.get = (_k, cb) => { deferredGetCb = cb; };
+    hasNotebook = true;
+    scroller.insertBefore(notebookSec, chatsSec);
+    Folders.setEnabled(true);
+    Folders.mount(mockDoc);
+    const secAfter = scroller.querySelectorAll('.gopt-folders-section')[0];
+    secAfter.querySelectorAll('.gopt-folder-add-btn')[0]._emit('click');
+    const compAfter = scroller.querySelectorAll('.gopt-folder-input')[0];
+    compAfter.value = 'LocalUnsaved';
+    compAfter._emit('keydown', { key: 'Enter' });
+    deferredGetCb({ [Folders.STORAGE_KEY]: { version: 1, folders: [], convs: {} } });
+    assert.equal(scroller.querySelectorAll('.gopt-folder-name')[0].textContent, 'LocalUnsaved', 'loadStore ignores stale result when dirtyStore is true');
+
+    Folders.destroy();
+    assert.equal(item1.getAttribute('data-gopt-in-folder'), null, 'destroy clears stamped attributes');
+    assert.equal(item2.getAttribute('data-gopt-in-folder'), null, 'destroy clears stamped attributes on item2');
+    assert.equal(scroller.childNodes.some((n) => n.classList.contains('gopt-folders-section')), false, 'destroy removes section');
+    assert.equal(body.childNodes.some((n) => n.classList.contains('gopt-conv-folder-btn')), false, 'destroy removes portals');
+  } finally {
+    globalThis.GeminiOptSelectors = prevSel;
+    globalThis.chrome = prevChrome;
+    if (prevLoc !== undefined) globalThis.location = prevLoc;
+    else delete globalThis.location;
+    globalThis.setTimeout = prevSetTo;
+    globalThis.clearTimeout = prevClrTo;
+    globalThis.innerWidth = prevW;
+    globalThis.innerHeight = prevH;
+  }
+
+  // Contract checks across manifest, folder-manager, main.js & ui-overlay.css
+  const endJs = manifest.content_scripts.find((c) => c.run_at === 'document_end').js;
+  assert.ok(endJs.indexOf('src/content/folder-manager.js') >= 0 && endJs.indexOf('src/content/folder-manager.js') < endJs.indexOf('src/content/token-tracker.js'));
+  const folderSrc = read('src', 'content', 'folder-manager.js');
+  assert.ok(!/\.innerHTML\b|\.outerHTML\b|insertAdjacentHTML|style\.setProperty|\.innerText\b|window\.(?:prompt|confirm|alert)\b/.test(folderSrc), 'CSP/DOM safety');
+  const mainSrc = read('src', 'content', 'main.js');
+  assert.ok(mainSrc.includes('gopt-folders-active') && mainSrc.includes('Folders.mount(document)') && mainSrc.includes('Folders.updateRoute(') && mainSrc.includes('Folders.destroy()'));
+  assert.ok(overlay.includes('.sidenav-with-history-container:not(.expanded) .gopt-folders-section'));
+  assert.ok(overlay.includes('html.gopt-folders-active :is(gem-nav-list-item, [data-test-id="conversation"])[data-gopt-in-folder="1"]'));
+  assert.ok(!overlay.includes('.gopt-folders-count') && !overlay.includes('.gopt-folder-badge'), 'count badge CSS removed');
+  assert.ok(overlay.includes('.gopt-color-custom') && overlay.includes('.gopt-folder-card.is-expanded') && overlay.includes('.gopt-menu-item.is-danger:hover'));
 });
 
 // ---------- syntax ----------

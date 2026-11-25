@@ -1,8 +1,16 @@
 # Version Tracker
 
-Current: **1.30.32**
+Current: **1.32.36**
 
 ## History
+- 2026-11-25 | **1.32.36** (from 1.31.32) | `+0M +1m +4f` | Conversation Folders UI polish: hide counts, custom color picker, menu order, tree indentation, and hover effects
+  - `minor`: Add custom hex color picker as the last color choice in New Folder composer and 3-dot folder menu
+  - `fix`: Remove folder count and per-folder conversation count badges from sidebar
+  - `fix`: Reorder 3-dot folder menu to Rename, Delete, then Color picker
+  - `fix`: Add folder tree indentation, subtle vertical guide, and expanded spacing between folders
+  - `fix`: Add icons and refined hover effects inside the 3-dot folder menu
+- 2026-11-25 | **1.31.32** (from 1.30.32) | `+0M +1m +0f` | Add Angular-safe Conversation Folders for Gemini LR26 sidebar
+  - `minor`: Add Angular-safe Conversation Folders to Gemini LR26 sidebar above Notebook with inline CRUD, 6-color dots, 1-convo-1-folder Move semantics, body-portaled assign picker, automatic hiding from All chats, SPA-first navigation, and Popup switch
 - 2026-11-25 | **1.30.32** (from 1.27.30) | `+0M +3m +2f` | Reset-Time Engine (provisional fixed-window + mathematical solver + clickable refresh) and 60fps LaTeX Optimization
   - `minor`: Add fixed-window provisional reset anchor on answer completion with automatic server-time snapping and preservation across 0% /usage scrapes
   - `minor`: Add clickable Token Usage bar manual /usage refresh with syncing state and scroll-aware post-answer sync deferral

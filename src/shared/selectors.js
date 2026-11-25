@@ -21,6 +21,20 @@
     stopButton: ['button[aria-label*="Stop" i]', 'button[aria-label*="Hentikan" i]', 'button.stop'],
     mainArea: ['main', 'chat-window', '.chat-container'],
     sidenav: ['bard-sidenav', 'side-navigation-v2', 'mat-sidenav', 'nav[role="navigation"]'],
+    sidenavHistoryContainer: ['div.sidenav-with-history-container', '.sidenav-with-history-container'],
+    sidenavScroller: ['side-navigation-content infinite-scroller', 'bard-sidenav infinite-scroller',
+      'side-navigation-v2 infinite-scroller', '[data-test-id="overflow-container"] infinite-scroller',
+      '[data-test-id="overflow-container"]'],
+    notebookSection: ['side-navigation-content expandable-section:not([data-test-id="chats-expandable-section"])',
+      'bard-sidenav expandable-section:not([data-test-id="chats-expandable-section"])',
+      'side-navigation-v2 expandable-section:not([data-test-id="chats-expandable-section"])'],
+    chatsSection: ['expandable-section[data-test-id="chats-expandable-section"]',
+      'conversations-list[data-test-id="all-conversations"]', 'side-navigation-content conversations-list'],
+    sidenavConvItem: ['gem-nav-list-item[data-test-id="conversation"]',
+      '[data-test-id="conversation"][data-conversation-id]', 'conversations-list [data-conversation-id]',
+      'side-navigation-content a[href*="/app/"]'],
+    sidenavConvTitle: ['.conversation-title', '[data-test-id="conversation-title"]', '.title',
+      '.mat-mdc-list-item-title'],
     composerAnchor: ['input-area-v2', '.input-area-container', '.bottom-container', 'main form', 'rich-textarea'],
     composerInput: ['rich-textarea [contenteditable="true"]', '.text-input-field [contenteditable="true"]',
       'rich-textarea textarea', '.ql-editor[contenteditable="true"]', 'div[role="textbox"][contenteditable="true"]'],
@@ -353,10 +367,184 @@
     return tagged;
   }
 
+  const RESERVED_CONV_IDS = new Set(['app', 'usage', 'gems', 'settings', 'saved-info', 'extensions', 'updates', 'u']);
+  const SKIP_TITLE_TAGS = new Set(['MAT-ICON', 'SVG', 'BUTTON', 'STYLE', 'SCRIPT', 'MAT-RIPPLE']);
+  const SKIP_TITLE_CLASSES = ['mat-icon', 'google-symbols', 'material-icons', 'cdk-visually-hidden',
+    'sr-only', 'visually-hidden', 'trailing-content', 'conversation-actions'];
+
+  function normalizeConvId(raw) {
+    if (!raw || typeof raw !== 'string') return '';
+    let s = raw.trim().split(/[?#]/)[0].replace(/\/+$/, '');
+    s = s.replace(/^https?:\/\/[^/]+/i, '');
+    s = s.replace(/^\/+/, '');
+    s = s.replace(/^u\/\d+\//i, '');
+    s = s.replace(/^app\//i, '');
+    s = s.replace(/^c_/i, '');
+    if (!s || RESERVED_CONV_IDS.has(s.toLowerCase())) return '';
+    if (!/^[a-zA-Z0-9_-]{3,128}$/.test(s)) return '';
+    return s;
+  }
+
+  function extractConvIdFromUrl(url) {
+    if (!url || typeof url !== 'string') return '';
+    const m = /(?:^|\/)app\/([a-zA-Z0-9_-]{3,128})(?:[/?#]|$)/.exec(url);
+    return m ? normalizeConvId(m[1]) : '';
+  }
+
+  function extractConvIdFromItem(itemEl) {
+    if (!itemEl) return '';
+    if (itemEl.getAttribute) {
+      const cidAttr = itemEl.getAttribute('data-conversation-id') || itemEl.getAttribute('data-test-conversation-id');
+      if (cidAttr) {
+        const cid = normalizeConvId(cidAttr);
+        if (cid) return cid;
+      }
+      const hrefAttr = itemEl.getAttribute('href');
+      if (hrefAttr) {
+        const cid = extractConvIdFromUrl(hrefAttr);
+        if (cid) return cid;
+      }
+    }
+    if (itemEl.querySelector) {
+      let nested = null;
+      try { nested = itemEl.querySelector('a[href*="/app/"], [data-conversation-id]'); } catch (_) { nested = null; }
+      if (nested && nested.getAttribute) {
+        const nCid = nested.getAttribute('data-conversation-id');
+        if (nCid) {
+          const cid = normalizeConvId(nCid);
+          if (cid) return cid;
+        }
+        const nHref = nested.getAttribute('href');
+        if (nHref) {
+          const cid = extractConvIdFromUrl(nHref);
+          if (cid) return cid;
+        }
+      }
+    }
+    return '';
+  }
+
+  function hasSkipTitleClass(el) {
+    if (el.classList) {
+      for (const c of SKIP_TITLE_CLASSES) {
+        if (el.classList.contains(c)) return true;
+      }
+    }
+    const cls = el.getAttribute && el.getAttribute('class');
+    if (typeof cls === 'string' && cls) {
+      const parts = cls.trim().split(/\s+/);
+      for (const p of parts) {
+        if (SKIP_TITLE_CLASSES.includes(p)) return true;
+      }
+    }
+    return false;
+  }
+
+  function collectCleanTitleText(node, isRoot, out) {
+    if (!node) return;
+    if (node.nodeType === 3) {
+      out.push(node.nodeValue !== undefined ? node.nodeValue : (node.textContent || ''));
+      return;
+    }
+    if (node.nodeType !== undefined && node.nodeType !== 1) return;
+    if (!isRoot) {
+      const tag = node.tagName ? String(node.tagName).toUpperCase() : '';
+      if (SKIP_TITLE_TAGS.has(tag)) return;
+      if (node.hasAttribute && node.hasAttribute('data-gopt-owned')) return;
+      if (node.getAttribute) {
+        if (node.getAttribute('aria-hidden') === 'true') return;
+        if (node.getAttribute('role') === 'button' && (node.getAttribute('aria-label') || node.getAttribute('aria-haspopup'))) return;
+      }
+      if (hasSkipTitleClass(node)) return;
+    }
+    const children = node.childNodes;
+    if (children && children.length > 0) {
+      for (let i = 0; i < children.length; i++) {
+        collectCleanTitleText(children[i], false, out);
+      }
+    } else if (!children && typeof node.textContent === 'string') {
+      out.push(node.textContent);
+    }
+  }
+
+  function extractConvTitle(itemEl) {
+    if (!itemEl) return '';
+    const titleNode = queryFirst(itemEl, SEL.sidenavConvTitle);
+    const target = titleNode || itemEl;
+    const out = [];
+    collectCleanTitleText(target, true, out);
+    let txt = cleanText(out.join(''));
+    if (!txt && titleNode && titleNode !== itemEl) {
+      const fallbackOut = [];
+      collectCleanTitleText(itemEl, true, fallbackOut);
+      txt = cleanText(fallbackOut.join(''));
+    }
+    if (!txt && itemEl.getAttribute) {
+      txt = cleanText(itemEl.getAttribute('aria-label') || itemEl.getAttribute('title') || '');
+    }
+    return txt;
+  }
+
+  function findSidenavScroller(doc) {
+    const d = doc || root.document;
+    if (!d) return null;
+    return queryFirst(d, SEL.sidenavScroller) || queryFirst(d, SEL.sidenav);
+  }
+
+  function findNotebookSection(doc) {
+    const d = doc || root.document;
+    if (!d) return null;
+    const direct = queryFirst(d, SEL.notebookSection);
+    if (direct) return direct;
+    const nav = queryFirst(d, SEL.sidenav) || d;
+    if (nav && nav.querySelectorAll) {
+      let secs = [];
+      try { secs = Array.from(nav.querySelectorAll('expandable-section')); } catch (_) { secs = []; }
+      for (const sec of secs) {
+        const dt = sec.getAttribute && sec.getAttribute('data-test-id');
+        if (dt !== 'chats-expandable-section') return sec;
+      }
+    }
+    return null;
+  }
+
+  function findChatsSection(doc) {
+    const d = doc || root.document;
+    return d ? queryFirst(d, SEL.chatsSection) : null;
+  }
+
+  function findSidenavConvItems(doc) {
+    const d = doc || root.document;
+    if (!d) return [];
+    const scope = queryFirst(d, SEL.sidenav) || d;
+    if (!scope || !scope.querySelectorAll) return [];
+    const seenIds = new Set();
+    const out = [];
+    for (const sel of SEL.sidenavConvItem) {
+      let found;
+      try { found = Array.from(scope.querySelectorAll(sel)); } catch (_) { continue; }
+      for (const el of found) {
+        if (!el) continue;
+        if (el.hasAttribute && el.hasAttribute('data-gopt-owned')) continue;
+        if (el.closest) {
+          try { if (el.closest('[data-gopt-owned]') !== null) continue; } catch (_) { /* ignore */ }
+        }
+        const cid = extractConvIdFromItem(el);
+        if (!cid || seenIds.has(cid)) continue;
+        seenIds.add(cid);
+        out.push(el);
+      }
+      if (out.length > 0) break;
+    }
+    return out;
+  }
+
   return Object.freeze({
     SEL, queryFirst, queryAll, findChatScroller, findMainArea, findComposerAnchor,
     findComposerInput, findDisclaimer, isVisible,
     getTurns, getTurnId, dedupePromptText, getPromptText,
-    isTurnStreaming, detectTheme, isProtected, hasProtectedDescendant, tagDynamicAttributionNodes
+    isTurnStreaming, detectTheme, isProtected, hasProtectedDescendant, tagDynamicAttributionNodes,
+    normalizeConvId, extractConvIdFromUrl, extractConvIdFromItem, extractConvTitle,
+    findSidenavScroller, findNotebookSection, findChatsSection, findSidenavConvItems
   });
 });

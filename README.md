@@ -4,10 +4,10 @@
 
 # Gemini Web Optimizer
 
-**Keep long Google Gemini conversations fast, readable, and clutter-free without breaking Angular or native controls.**
+**Organize chats into folders, track official usage & context tokens, and keep long or LaTeX-heavy Gemini conversations 60fps smooth — without breaking Angular or native controls.**
 
 [![CI](https://github.com/Raincl-oud/gemini-optimizer-ext/actions/workflows/ci.yml/badge.svg)](https://github.com/Raincl-oud/gemini-optimizer-ext/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-1.30.32-0b57d0?style=flat)](VERSION.md)
+[![Version](https://img.shields.io/badge/version-1.32.36-0b57d0?style=flat)](VERSION.md)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-0b57d0?style=flat)](manifest.json)
 [![Browsers](https://img.shields.io/badge/browsers-Chromium%20Based%20Browsers-334155?style=flat)](#installation)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-16a34a?style=flat)](#development--testing)
@@ -15,7 +15,7 @@
 
 <p>
   <a href="#features">Features</a> •
-  <a href="#cold-load-performance">Performance</a> •
+  <a href="#performance-architecture">Performance</a> •
   <a href="#installation">Installation</a> •
   <a href="#privacy--permissions">Privacy</a> •
   <a href="#development--testing">Development</a>
@@ -25,35 +25,38 @@
 
 ---
 
-Long Gemini Web threads slow down the browser, stretch vertical scrolling, and bury your reading area under narrow columns and source clutter. **Gemini Web Optimizer** solves this with a zero-dependency Manifest V3 extension that stays **100% Angular safe** it never detaches DOM nodes or breaks native Copy, Edit, Regenerate, Canvas, or *Show thinking* controls.
+Long or math-heavy Google Gemini Web threads slow down scrolling, bury reading space under narrow columns and source clutter, and leave chat histories ungrouped. **Gemini Web Optimizer** fixes all of that with a zero-dependency Manifest V3 extension engineered to stay **100% Angular-safe** — it never detaches Angular DOM nodes or breaks native Copy, Edit, Regenerate, Canvas, or *Show thinking* controls.
 
 ## Features
 
 | Capability | What It Does |
 | :--- | :--- |
-| **Wrap Long Chats** | Automatically wraps older turns into compact summary bars while keeping the latest turn plus your chosen number of **Open Past Chats** (`0–999`, default `4`) expanded. Manually opened chats get a dynamic sticky **Wrap** pill. |
-| **Cold Load Acceleration** | Pre wraps older turns synchronously at `document_start` before Angular paints, runs frame 0 hydration at `document_end`, defers attribution scans to idle time, and marks wrapped images `loading="lazy"` + `decoding="async"`. |
-| **Left Strip Navigator** | 1:1 scrollable strip rail along the left edge of open chats with GPU only hover magnification, prompt tooltips (`Wrapped` / `Open`), active scroll spy, and click to jump auto expansion. |
-| **Adjustable Full Width** | Expand chat content and composer between **`60%–100%`** with smooth toggle transitions, automatic **Home / New Chat exemption**, and **Canvas split pane safety**. |
-| **Typography Controls** | Customize **Font Family** (`Default`, `Sans`, `Serif`, `Mono`), **Font Size**, **Line Height**, **Paragraph Spacing**, and **Letter Spacing** independently while keeping code blocks and tables clean. |
+| **Conversation Folders** | Adds a native-styled **Folders** section in the Gemini sidebar directly above `Notebook` with 1-chat-per-folder Move semantics, automatic CSS hiding of organized chats from `All`, a zero-mutation hover assign button + `+ Current` quick picker, inline Rename/Delete (1-click empty, 2-click confirm non-empty), 6 preset colors + custom hex color picker, tree indentation, and SPA-first navigation. |
+| **Token & Official Usage Bar** | Replaces the bottom disclaimer slot with a compact context token meter and live official `gemini.google.com/usage` **5-hour** & **Weekly** `% used` tracker. Includes a mathematical reset-time solver, provisional fixed-window countdowns (`~5h` / `~7d`) that snap to server time, clickable manual refresh, and scroll-aware post-answer sync. |
+| **60fps LaTeX Optimization** | Eliminates heavy-math lag by shielding KaTeX subtrees from DOM/CSS scans, virtualizing off-screen markdown & equation blocks (`content-visibility: auto` with `overflow-clip-margin`), pausing `.markdown` hit-testing during active scroll, automatically engaging **LaTeX Heavy Auto-Guard** (`>= 50` formulas), and offering an optional **Lite LaTeX Render** toggle (hides duplicate `.katex-mathml` while keeping Gemini's Copy button intact). |
+| **Wrap Long Chats** | Automatically wraps older turns into compact summary bars while keeping the active turn plus your chosen number of **Open Past Chats** (`0–999`, default `4`) expanded. Manually opened past chats get a dynamic sticky **Wrap** pill. |
+| **Left Strip Navigator** | 1:1 scrollable strip rail along the left edge of open chats with GPU-only hover magnification, prompt tooltips (`Wrapped` / `Open`), active scroll spy, and click-to-jump auto-expansion. |
+| **Adjustable Full Width** | Expands chat content, wrapped bars, and composer between **`60%–100%`** with smooth transitions, automatic **Home / New Chat exemption**, and **Canvas split-pane safety**. |
+| **Typography Controls** | Customize **Font Family** (`Default`, `Sans`, `Serif`, `Mono`), **Font Size**, **Line Height**, **Paragraph Spacing**, and **Letter Spacing** independently while keeping code blocks, tables, and KaTeX formulas clean. |
 | **Hide Sources & Citations** | Removes inline citation chips, source carousels, and attribution strips while preserving Drive/Gmail cards, normal Markdown links, and *Show thinking*. |
-| **Quick Scroll to Bottom** | Adds a clean circular scroll to bottom button aligned above the composer and hides duplicate native buttons. |
+| **Quick Scroll to Bottom** | Adds a clean circular scroll-to-bottom button aligned above the composer and hides duplicate native buttons. |
 
-## Cold-Load Performance
+## Performance Architecture
 
-Designed specifically for heavy, 50–100+ turn conversations without risking Angular state corruption:
+Built for 50–100+ turn threads and math-heavy chats with hundreds of KaTeX equations without risking Angular state corruption:
 
 | Phase | Mechanism | Effect |
 | :--- | :--- | :--- |
-| **1. `document_start`** | [early-boot.js](src/content/early-boot.js) reads a synchronous `localStorage` settings mirror and injects a Selector Level 4 `:not([data-gopt-turn]):nth-last-child(...)` rule | Older turns are held at `44px` with `content-visibility: hidden` before first paint zero scroll jump when JS hydrates |
-| **2. `document_end`** | [main.js](src/content/main.js) boots before subresources finish and uses a frame 0 `requestAnimationFrame` pass during cold load (`150ms` debounce for steady streaming) | Eliminates startup lag while deferring heavy dynamic attribution scans to `requestIdleCallback` |
-| **3. Render Isolation** | [ui-overlay.css](src/content/ui-overlay.css), [early-perf.css](src/content/early-perf.css), [collapse-manager.js](src/content/collapse-manager.js) | Applies `contain: layout style` to wrapped turns, suppresses heavy shadows/filters during initial mount, and tags wrapped `<img>` nodes `lazy`/`async` |
+| **1. `document_start`** | [early-boot.js](src/content/early-boot.js) reads a synchronous `localStorage` mirror and injects a Selector Level 4 `:not([data-gopt-turn]):nth-last-child(...)` rule + `gopt-lite-latex` class | Holds older turns at `44px` (`content-visibility: hidden`) before first paint — zero scroll jump on hydration |
+| **2. `document_end`** | [main.js](src/content/main.js) boots before subresources finish with frame-0 `rAF` cold-load hydration and `requestIdleCallback` attribution deferral | Eliminates startup freeze and skips KaTeX subtrees completely during attribution scanning |
+| **3. Intra-Turn Virtualization** | [early-perf.css](src/content/early-perf.css), [ui-overlay.css](src/content/ui-overlay.css), [collapse-manager.js](src/content/collapse-manager.js) | Applies block-level `content-visibility: auto` (`overflow-clip-margin: 12px`) to finished paragraphs & `.math-block` equations, `contain: layout style` to wrapped turns, and lazy/async hints to wrapped images |
+| **4. 60fps Scroll Engine** | [strip-navigator.js](src/content/strip-navigator.js), [token-tracker.js](src/content/token-tracker.js), [main.js](src/content/main.js) | Caches rail/button/token geometries across scroll frames, activates a local `[data-gopt-scrolling="1"]` hit-test shield on `.markdown`, and adapts observer debouncing when `>= 50` KaTeX nodes are present |
 
 ## Installation
 
 Works on **Google Chrome**, **Microsoft Edge**, **Opera GX**, and other Chromium Manifest V3 browsers.
 
-### Option A - Download Release (Recommended)
+### Option A — Download Release (Recommended)
 
 1. Download the latest `gemini-web-optimizer-v*.zip` from [**Releases**](https://github.com/Raincl-oud/gemini-optimizer-ext/releases).
 2. Extract the `.zip` into a permanent folder on your computer.
@@ -65,7 +68,7 @@ Works on **Google Chrome**, **Microsoft Edge**, **Opera GX**, and other Chromium
 5. Click **Load unpacked** and select the extracted folder (containing `manifest.json`).
 6. Open or reload [gemini.google.com](https://gemini.google.com/).
 
-### Option B - Clone from Source
+### Option B — Clone from Source
 
 ```bash
 git clone https://github.com/Raincl-oud/gemini-optimizer-ext.git
@@ -84,18 +87,18 @@ Then follow steps **3–6** above, selecting the cloned `gemini-optimizer-ext` f
 
 ## Privacy & Permissions
 
-**100% local execution** zero telemetry, zero analytics, and zero external network requests.
+**100% local execution** — zero telemetry, zero analytics, and zero third-party network requests. All activity stays strictly on `https://gemini.google.com/*`.
 
 | Permission / Storage | Why It's Needed |
 | :--- | :--- |
 | `host_permissions` (`https://gemini.google.com/*`) | Restricts content scripts strictly to Gemini Web pages. |
-| `storage` (`chrome.storage.local`) | Persists your popup settings locally across sessions. |
-| `localStorage['goptEarly']` *(on `gemini.google.com`)* | Minimal 3-field mirror (`autoCollapse`, `openPastChats`, `hideSources`) enabling synchronous `document_start` pre-wrapping. |
-| `tabs` | Queries the active Gemini tab so the popup can show live turn counts and run quick actions (`Open All`, `Wrap Old`, `Top`, `Bottom`). |
+| `storage` (`chrome.storage.local`) | Persists your popup settings (`goptSettings`), folder organization (`goptFolders`), and synced official quota snapshot (`goptTokenUsage`) locally across sessions. |
+| `localStorage['goptEarly']` *(on `gemini.google.com`)* | Minimal 4-field mirror (`autoCollapse`, `openPastChats`, `hideSources`, `liteLatex`) enabling synchronous `document_start` pre-wrapping and Lite LaTeX rendering. |
+| `tabs` | Queries the active Gemini tab for popup status/quick actions (`Open All`, `Wrap Old`, `Top`, `Bottom`), and briefly opens/auto-closes a silent background `gemini.google.com/usage#gopt-sync` tab to sync your official 5h/weekly quota (manually opened `/usage` tabs are never closed). |
 
 ## Development & Testing
 
-No bundler, build step, or `npm install` is required edit files and reload in the browser. Requires **Node.js 18+** to run the automated syntax, logic, and CSS guardrail test suite (`45` checks):
+No bundler, build step, or `npm install` is required — edit files and reload in the browser. Requires **Node.js 18+** to run the automated syntax, unit, mock-DOM, and CSS §11 guardrail test suite (`60` checks):
 
 ```bash
 node tests/unit-checks.mjs
@@ -109,19 +112,23 @@ node tests/unit-checks.mjs
 ├── manifest.json                 # Manifest V3 configuration
 ├── icons/                        # Extension icons (16, 48, 128 px)
 ├── src/
+│   ├── background/
+│   │   └── usage-sync.js         # MV3 service worker for silent official /usage background sync
 │   ├── content/
-│   │   ├── early-boot.js         # document_start pre-wrap & cold-load guard
-│   │   ├── early-perf.css        # Performance hints, full-width & cold-load suppression
-│   │   ├── ui-overlay.css        # Summary bars, Wrap pill, strip rail, tooltip & typography
+│   │   ├── early-boot.js         # document_start pre-wrap, Lite LaTeX mirror & cold-load guard
+│   │   ├── early-perf.css        # Intra-turn virtualization, scroll shield, full-width & Lite LaTeX CSS
+│   │   ├── ui-overlay.css        # Folders UI, summary bars, Wrap pill, strip rail, usage bar & typography
 │   │   ├── collapse-manager.js   # Wrap state machine, sticky pill & lazy media deferral
 │   │   ├── strip-navigator.js    # Left strip navigator & tooltip portal
-│   │   └── main.js               # Content orchestrator & popup message bridge
+│   │   ├── folder-manager.js     # Angular-safe sidebar Conversation Folders, portals & storage sync
+│   │   ├── token-tracker.js      # Context token meter, reset-time solver, provisional anchor & /usage scraper
+│   │   └── main.js               # Content orchestrator, Auto-Guard, scroll shield & popup bridge
 │   ├── popup/                    # Adaptive popup UI (HTML, CSS, JS)
 │   └── shared/
 │       ├── settings.js           # Settings schema, validation & serialized storage queue
-│       └── selectors.js          # Gemini LR26 DOM selectors & attribution matchers
+│       └── selectors.js          # Single DOM seam for Gemini LR26 chat & sidebar selectors
 ├── tests/
-│   └── unit-checks.mjs           # Zero-dependency Node syntax, unit & CSS guardrail suite
+│   └── unit-checks.mjs           # Zero-dependency Node syntax, unit, mock-DOM & CSS guardrail suite
 ├── .github/workflows/ci.yml      # GitHub Actions CI workflow
 ├── docs/specs/                   # Architecture & design specifications
 └── VERSION.md                    # Monotonic release history
