@@ -9,6 +9,7 @@
   const STORAGE_KEY = 'goptFolders';
   const STORE_VERSION = 1;
   const FOLDER_COLORS = Object.freeze(['slate', 'blue', 'teal', 'amber', 'rose', 'violet']);
+  const COMPOSER_COLORS = Object.freeze(['slate', 'blue', 'teal']);
   const MAX_NAME_LEN = 48;
   const MAX_FOLDERS = 60;
   const MAX_CONVS = 600;
@@ -508,7 +509,8 @@
     dotEl.style.backgroundColor = isCustomColor(color) ? color : '';
   }
 
-  function buildColorSwatchRow(doc, cls, getCurrentColor, onPreset, onCustomInput, onCustomChange) {
+  function buildColorSwatchRow(doc, cls, colors, getCurrentColor, onPreset, onCustomInput, onCustomChange) {
+    const paletteColors = Array.isArray(colors) && colors.length ? colors : FOLDER_COLORS;
     const row = createEl(doc, 'div', cls);
     row.setAttribute('role', 'group');
     row.setAttribute('aria-label', 'Folder color');
@@ -534,7 +536,7 @@
       customInput.value = customActive ? activeColor : '#3b82f6';
     };
 
-    for (const c of FOLDER_COLORS) {
+    for (const c of paletteColors) {
       const dot = createEl(doc, 'button', 'gopt-color-dot');
       dot.type = 'button';
       dot.setAttribute('data-color', c);
@@ -634,6 +636,7 @@
     const compPalette = buildColorSwatchRow(
       doc,
       'gopt-color-dots',
+      COMPOSER_COLORS,
       function () { return S.composerColor; },
       function (c) { S.composerColor = c; },
       function (hex) { S.composerColor = hex; },
@@ -1058,6 +1061,7 @@
     const palette = buildColorSwatchRow(
       doc,
       'gopt-menu-colors',
+      FOLDER_COLORS,
       function () { return folder.color; },
       function (c) { applyLiveColor(c, false); },
       function (hex) { applyLiveColor(hex, false); },
@@ -1656,7 +1660,7 @@
   }
 
   return Object.freeze({
-    STORAGE_KEY, FOLDER_COLORS, MAX_NAME_LEN, DELETE_CONFIRM_MS,
+    STORAGE_KEY, FOLDER_COLORS, COMPOSER_COLORS, MAX_NAME_LEN, DELETE_CONFIRM_MS,
     isCustomColor, normalizeFolderStore, createFolder, renameFolder, setFolderColor,
     toggleFolderCollapsed, toggleSectionCollapsed, deleteFolder,
     assignConvToFolder, removeConvFromFolders, syncConvTitles,

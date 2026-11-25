@@ -1299,6 +1299,30 @@ check('token-tracker: end-to-end mount + update + chrome.storage.onChanged live 
       fakeTimers.clear();
       assert.equal(sentMessages.filter((m) => m.reason === 'response').length, 0, 'storage update must not re-trigger response sync');
       assert.ok(span5h.textContent.startsWith('5h 14%'), 'bar updates to new synced 14%: ' + span5h.textContent);
+
+      // Regression: switching conversations (Convo A -> empty loading shell -> Convo B hydrated, even multi-wave) must NOT trigger /usage sync
+      sentMessages.length = 0;
+      globalThis.location = { pathname: '/app/other456', hash: '', href: 'https://gemini.google.com/app/other456' };
+      TokenTracker.resetRoute();
+      TokenTracker.update({ turns: [], streaming: false, wasStreaming: false, url: 'https://gemini.google.com/app/other456', doc: mockDoc });
+      const bTurn1 = { querySelector: (s) => (s === 'user-query' ? { textContent: 'B q1' } : s === 'model-response' ? { textContent: 'B answer 1 full text' } : null) };
+      const bTurn2 = { querySelector: (s) => (s === 'user-query' ? { textContent: 'B q2' } : s === 'model-response' ? { textContent: 'B answer 2 full text' } : null) };
+      TokenTracker.update({ turns: [bTurn1], streaming: false, wasStreaming: false, url: 'https://gemini.google.com/app/other456', doc: mockDoc });
+      TokenTracker.update({ turns: [bTurn1, bTurn2], streaming: false, wasStreaming: false, url: 'https://gemini.google.com/app/other456', doc: mockDoc });
+      for (const [, t] of fakeTimers) t.fn();
+      fakeTimers.clear();
+      assert.equal(sentMessages.filter((m) => m.reason === 'response').length, 0, 'switching conversations must NOT trigger /usage sync');
+
+      // Regression: navigating from bare /app Home without typing a prompt to an existing convo must NOT trigger sync
+      globalThis.location = { pathname: '/app', hash: '', href: 'https://gemini.google.com/app' };
+      TokenTracker.resetRoute();
+      TokenTracker.update({ turns: [], streaming: false, wasStreaming: false, url: 'https://gemini.google.com/app', doc: mockDoc });
+      globalThis.location = { pathname: '/app/existing789', hash: '', href: 'https://gemini.google.com/app/existing789' };
+      TokenTracker.resetRoute();
+      TokenTracker.update({ turns: [bTurn1, bTurn2], streaming: false, wasStreaming: false, url: 'https://gemini.google.com/app/existing789', doc: mockDoc });
+      for (const [, t] of fakeTimers) t.fn();
+      fakeTimers.clear();
+      assert.equal(sentMessages.filter((m) => m.reason === 'response').length, 0, 'opening existing chat from Home without prompt must NOT trigger sync');
     } finally {
       globalThis.setTimeout = prevSetTo;
       globalThis.clearTimeout = prevClrTo;
@@ -2240,7 +2264,7 @@ check('folder-manager: LR26 DOM injection (Notebook vs chatsSection fallback), 1
     assert.equal(secEl.querySelectorAll('.gopt-folders-count').length, 0, 'no folder count badge in header');
     assert.equal(secEl.querySelectorAll('.gopt-folder-badge').length, 0, 'no convo count badge on folder row');
     const compSwatches = secEl.querySelectorAll('.gopt-color-dots')[0];
-    assert.equal(compSwatches.childNodes.length, Folders.FOLDER_COLORS.length + 1);
+    assert.equal(compSwatches.childNodes.length, Folders.COMPOSER_COLORS.length + 1, 'reduced composer swatches (3 presets + custom)');
     assert.ok(compSwatches.childNodes[compSwatches.childNodes.length - 1].classList.contains('gopt-color-custom'), 'custom color is last choice in composer');
 
     const menuBtn1 = secEl.querySelectorAll('.gopt-folder-menu-btn')[0];
@@ -2251,6 +2275,7 @@ check('folder-manager: LR26 DOM injection (Notebook vs chatsSection fallback), 1
     assert.equal(menuEl.childNodes[1].textContent, 'Delete', '2nd menu item is Delete');
     assert.ok(menuEl.childNodes[2].classList.contains('gopt-menu-colors'), '3rd menu item is Color picker');
     const menuColors = menuEl.childNodes[2];
+    assert.equal(menuColors.childNodes.length, Folders.FOLDER_COLORS.length + 1, '3-dot menu keeps all 6 presets + custom');
     const customSwatch = menuColors.childNodes[menuColors.childNodes.length - 1];
     assert.ok(customSwatch.classList.contains('gopt-color-custom'), 'custom color is last choice in 3-dot menu');
     const customInput = customSwatch.querySelectorAll('.gopt-color-native')[0];

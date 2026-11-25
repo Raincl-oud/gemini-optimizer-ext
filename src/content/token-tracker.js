@@ -632,7 +632,10 @@
     turnCache: new WeakMap(),
     store: normalizeUsageStore(null, Date.now()),
     storeLoaded: false,
-    fromEmptyChat: false,
+    fromHomeSubmit: false,
+    lastDraftTokens: 0,
+    sawUserInputSinceRoute: false,
+    routeHydrateUntil: 0,
     lastResponseSig: { path: '', lastTurnEl: null, lastTurnOut: 0 },
     lastUpdateArgs: { turns: [], streaming: false, wasStreaming: false, url: '' }
   };
@@ -1287,6 +1290,7 @@
   }
 
   function onDraftInput() {
+    S.sawUserInputSinceRoute = true;
     root.clearTimeout(S.draftTimer);
     S.draftTimer = root.setTimeout(function () {
       S.draftTimer = 0;
@@ -1473,6 +1477,9 @@
     S.doc = doc || root.document;
     if (!S.doc || S.mounted) return;
     S.mounted = true;
+    S.routeHydrateUntil = Date.now() + 1800;
+    S.sawUserInputSinceRoute = false;
+    S.fromHomeSubmit = false;
     S.isAutoSyncTab = !!(root.location && root.location.hash === '#gopt-sync');
     attachStorageListener();
 
@@ -1520,6 +1527,8 @@
     const turns = S.lastUpdateArgs.turns;
     const doc = S.lastUpdateArgs.doc;
     const draft = readDraftInfo(doc);
+    if (draft.draftTokens > 0) S.sawUserInputSinceRoute = true;
+    S.lastDraftTokens = draft.draftTokens;
 
     if (!S.enabled) {
       setVisible(false);
@@ -1539,27 +1548,33 @@
       }
     } else {
       let responseCompleted = edgeFinished;
+      const hydrating = Date.now() < S.routeHydrateUntil && !S.sawUserInputSinceRoute;
       if (S.lastResponseSig.path !== curPath) {
         if (turns.length === 0) {
-          S.fromEmptyChat = true;
           S.lastResponseSig = { path: curPath, lastTurnEl: null, lastTurnOut: 0 };
         } else {
-          if (S.fromEmptyChat && lastTurnOut > 0) responseCompleted = true;
-          S.fromEmptyChat = false;
+          if (S.fromHomeSubmit && turns.length === 1 && lastTurnOut > 0) responseCompleted = true;
+          S.fromHomeSubmit = false;
           S.lastResponseSig = { path: curPath, lastTurnEl: lastTurnEl, lastTurnOut: lastTurnOut };
         }
       } else if (lastTurnEl) {
-        const isNewLastTurn = S.lastResponseSig.lastTurnEl !== null && lastTurnEl !== S.lastResponseSig.lastTurnEl;
-        const seededFromEmpty = S.lastResponseSig.lastTurnEl === null;
-        const grewOutput = (S.lastResponseSig.lastTurnOut === 0 && lastTurnOut > 0) ||
-          (lastTurnOut > S.lastResponseSig.lastTurnOut + 10);
-        if (lastTurnOut > 0 && (isNewLastTurn || seededFromEmpty || grewOutput)) {
-          responseCompleted = true;
-        }
-        if (lastTurnEl !== S.lastResponseSig.lastTurnEl || lastTurnOut > S.lastResponseSig.lastTurnOut) {
+        if (S.lastResponseSig.lastTurnEl === null) {
+          // Initial hydration of an existing conversation after empty loading state must NOT trigger /usage sync.
+          if (S.fromHomeSubmit && turns.length === 1 && lastTurnOut > 0) responseCompleted = true;
+          S.fromHomeSubmit = false;
           S.lastResponseSig = { path: curPath, lastTurnEl: lastTurnEl, lastTurnOut: lastTurnOut };
+        } else {
+          const isNewLastTurn = lastTurnEl !== S.lastResponseSig.lastTurnEl;
+          const grewOutput = (S.lastResponseSig.lastTurnOut === 0 && lastTurnOut > 0) ||
+            (lastTurnOut > S.lastResponseSig.lastTurnOut + 10);
+          if (lastTurnOut > 0 && ((isNewLastTurn && !hydrating) || (!isNewLastTurn && grewOutput))) {
+            responseCompleted = true;
+          }
+          if (isNewLastTurn || lastTurnOut > S.lastResponseSig.lastTurnOut) {
+            S.lastResponseSig = { path: curPath, lastTurnEl: lastTurnEl, lastTurnOut: lastTurnOut };
+          }
+          S.fromHomeSubmit = false;
         }
-        S.fromEmptyChat = false;
       }
       if (responseCompleted) {
         const nowTs = Date.now();
@@ -1630,9 +1645,12 @@
     clearPostAnswerSyncTimers();
     setManualSyncing(false);
     stopScraper();
-    const prevWasHomeOrEmpty = S.fromEmptyChat || S.lastResponseSig.path === '/app' ||
-      (S.lastUpdateArgs.turns && S.lastUpdateArgs.turns.length === 0);
-    S.fromEmptyChat = prevWasHomeOrEmpty && !isUsagePath(root.location);
+    const prevPath = S.lastResponseSig.path || pathnameOf(S.lastUpdateArgs && S.lastUpdateArgs.url);
+    const isHomePath = prevPath === '/app' || prevPath === '/' || /^\/u\/\d+\/app$/i.test(prevPath);
+    S.fromHomeSubmit = isHomePath && (S.lastDraftTokens > 0 || S.sawUserInputSinceRoute) && !isUsagePath(root.location);
+    S.lastDraftTokens = 0;
+    S.sawUserInputSinceRoute = false;
+    S.routeHydrateUntil = Date.now() + 1800;
     S.lastResponseSig = { path: '', lastTurnEl: null, lastTurnOut: 0 };
     S.lastBarPos = '';
     S.lastUpdateArgs = { turns: [], streaming: false, wasStreaming: false, url: root.location ? root.location.href : '', doc: S.doc };
@@ -1676,7 +1694,10 @@
     S.bar = null;
     S.tip = null;
     S.doc = null;
-    S.fromEmptyChat = false;
+    S.fromHomeSubmit = false;
+    S.lastDraftTokens = 0;
+    S.sawUserInputSinceRoute = false;
+    S.routeHydrateUntil = 0;
     S.lastResponseSig = { path: '', lastTurnEl: null, lastTurnOut: 0 };
     S.store = normalizeUsageStore(null, Date.now());
     S.storeLoaded = false;

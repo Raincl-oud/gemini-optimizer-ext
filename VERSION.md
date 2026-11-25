@@ -1,8 +1,12 @@
 # Version Tracker
 
-Current: **1.32.36**
+Current: **1.33.38**
 
 ## History
+- 2026-11-25 | **1.33.38** (from 1.32.36) | `+0M +1m +2f` | Fix convo-switch spurious /usage sync, trim New Folder composer colors, and add 1-command PowerShell installer
+  - `minor`: Add 1-command Windows PowerShell installer and updater (install.ps1) with clipboard path copy and updated README instructions
+  - `fix`: Prevent spurious /usage background sync and provisional reset triggers when switching conversations or hydrating existing chats
+  - `fix`: Reduce inline New Folder composer color choices to 3 presets plus custom color while keeping full palette in the 3-dot folder menu
 - 2026-11-25 | **1.32.36** (from 1.31.32) | `+0M +1m +4f` | Conversation Folders UI polish: hide counts, custom color picker, menu order, tree indentation, and hover effects
   - `minor`: Add custom hex color picker as the last color choice in New Folder composer and 3-dot folder menu
   - `fix`: Remove folder count and per-folder conversation count badges from sidebar

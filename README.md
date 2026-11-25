@@ -7,7 +7,7 @@
 **Organize chats into folders, track official usage & context tokens, and keep long or LaTeX-heavy Gemini conversations 60fps smooth — without breaking Angular or native controls.**
 
 [![CI](https://github.com/Raincl-oud/gemini-optimizer-ext/actions/workflows/ci.yml/badge.svg)](https://github.com/Raincl-oud/gemini-optimizer-ext/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-1.32.36-0b57d0?style=flat)](VERSION.md)
+[![Version](https://img.shields.io/badge/version-1.33.38-0b57d0?style=flat)](VERSION.md)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-0b57d0?style=flat)](manifest.json)
 [![Browsers](https://img.shields.io/badge/browsers-Chromium%20Based%20Browsers-334155?style=flat)](#installation)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-16a34a?style=flat)](#development--testing)
@@ -56,25 +56,28 @@ Built for 50–100+ turn threads and math-heavy chats with hundreds of KaTeX equ
 
 Works on **Google Chrome**, **Microsoft Edge**, **Opera GX**, and other Chromium Manifest V3 browsers.
 
-### Option A — Download Release (Recommended)
+### Option A — 1-Command PowerShell Install / Update (Windows, Recommended)
 
-1. Download the latest `gemini-web-optimizer-v*.zip` from [**Releases**](https://github.com/Raincl-oud/gemini-optimizer-ext/releases).
-2. Extract the `.zip` into a permanent folder on your computer.
-3. Open your browser's extensions page:
-   - Chrome: `chrome://extensions`
-   - Edge: `edge://extensions`
-   - Opera GX: `opera://extensions`
-4. Turn on **Developer mode**.
-5. Click **Load unpacked** and select the extracted folder (containing `manifest.json`).
-6. Open or reload [gemini.google.com](https://gemini.google.com/).
+Open **PowerShell** and run:
 
-### Option B — Clone from Source
-
-```bash
-git clone https://github.com/Raincl-oud/gemini-optimizer-ext.git
+```powershell
+irm https://raw.githubusercontent.com/Raincl-oud/gemini-optimizer-ext/main/install.ps1 | iex
 ```
 
-Then follow steps **3–6** above, selecting the cloned `gemini-optimizer-ext` folder.
+This downloads and extracts the extension cleanly to `%LOCALAPPDATA%\GeminiWebOptimizer` (no Git required) and copies the folder path to your clipboard. Then complete the one-time unpacked load in your browser:
+
+1. Open `chrome://extensions` (Chrome), `edge://extensions` (Edge), or `opera://extensions` (Opera GX).
+2. Turn on **Developer mode**.
+3. Click **Load unpacked**, press **`Ctrl+V`**, and select the folder.
+4. Open or reload [gemini.google.com](https://gemini.google.com/).
+
+*(Run the same PowerShell command anytime to update in-place, then click **Reload** in your browser's extensions page.)*
+
+### Option B — Download Release or Clone Manually
+
+1. Download the latest `gemini-web-optimizer-v*.zip` from [**Releases**](https://github.com/Raincl-oud/gemini-optimizer-ext/releases) (or run `git clone https://github.com/Raincl-oud/gemini-optimizer-ext.git`).
+2. Extract into a permanent folder on your computer.
+3. Follow steps **1–4** above to load the folder containing `manifest.json`.
 
 <details>
 <summary><strong>How to update after pulling changes</strong></summary>
@@ -110,6 +113,7 @@ node tests/unit-checks.mjs
 ```text
 .
 ├── manifest.json                 # Manifest V3 configuration
+├── install.ps1                   # 1-command Windows PowerShell installer & updater
 ├── icons/                        # Extension icons (16, 48, 128 px)
 ├── src/
 │   ├── background/
