@@ -17,10 +17,16 @@
 
   const DEBOUNCE_MS = 150;
   const MAX_WAIT_MS = 600;
+  const HEAVY_DEBOUNCE_MS = 500;
+  const HEAVY_MAX_WAIT_MS = 900;
   const WAIT_CHAT_MS = 30000;
   const ROUTE_POLL_MS = 700;
   const COLD_LOAD_MS = 500;
   const COLD_SETTLE_MS = 350;
+  const STREAM_WATCH_MS = 450;
+  const HEAVY_STREAM_WATCH_MS = 650;
+  const SCROLL_IDLE_MS = 120;
+  const LATEX_HEAVY_THRESHOLD = 50;
   const html = document.documentElement;
 
   const state = {
@@ -33,6 +39,8 @@
     scrollBtnTrackUntil: 0,
     scrollBtnRo: null,
     scrollBtnRoTargets: [],
+    scrollBtnPosDirty: true,
+    scrollBtnVisible: false,
     widthAnimTimer: 0,
     routeTimer: 0,
     lastBtnPos: '',
@@ -42,6 +50,7 @@
     bodyTimeout: 0,
     refreshTimer: 0,
     refreshRaf: 0,
+    streamWatchTimer: 0,
     coldLoading: true,
     coldSettleTimer: 0,
     idleTagHandle: 0,
@@ -51,6 +60,14 @@
     href: location.href,
     turnCount: 0,
     streaming: false,
+    latexHeavy: false,
+    scrolling: false,
+    scrollShieldEl: null,
+    scrollIdleTimer: 0,
+    pointerDownBound: false,
+    scrollIdleCallbacks: new Set(),
+    pendingTokenArgs: null,
+    lastTokenUpdateAt: 0,
     forceTagAll: false,
     seenTurns: new WeakSet()
   };
@@ -151,6 +168,7 @@
   }
 
   function applyTextOpt() {
+    state.scrollBtnPosDirty = true;
     const t = state.settings.textOpt || Settings.DEFAULT_TEXT_OPT;
     const fullActive = t.fullWidth !== false && state.turnCount > 0;
     const cw = t.contentWidth !== undefined && t.contentWidth !== null ? t.contentWidth : 100;
@@ -168,6 +186,7 @@
     toggle('gopt-active', true);
     toggle('gopt-light-render', true);
     toggle('gopt-hide-sources', state.settings.hideSources);
+    toggle('gopt-lite-latex', !!state.settings.liteLatex);
     toggle('gopt-dark', Selectors.detectTheme(document) === 'dark');
     applyTextOpt();
   }
@@ -209,6 +228,64 @@
     state.scrollBtn = btn;
   }
 
+  function clearScrollShield() {
+    clearTimeout(state.scrollIdleTimer);
+    state.scrollIdleTimer = 0;
+    if (!state.scrolling) return;
+    state.scrolling = false;
+    if (state.scrollShieldEl) state.scrollShieldEl.removeAttribute('data-gopt-scrolling');
+    if (state.pendingTokenArgs && TokenTracker) {
+      const args = state.pendingTokenArgs;
+      state.pendingTokenArgs = null;
+      state.lastTokenUpdateAt = Date.now();
+      TokenTracker.update(args);
+    }
+    const cbs = Array.from(state.scrollIdleCallbacks);
+    state.scrollIdleCallbacks.clear();
+    for (const cb of cbs) {
+      try { cb(); } catch (_) { /* ignore */ }
+    }
+  }
+
+  function onScrollActivity() {
+    if (!state.scrolling) {
+      state.scrolling = true;
+      if (state.scrollShieldEl) state.scrollShieldEl.setAttribute('data-gopt-scrolling', '1');
+    }
+    clearTimeout(state.scrollIdleTimer);
+    state.scrollIdleTimer = setTimeout(clearScrollShield, SCROLL_IDLE_MS);
+  }
+
+  function onScrollIdle(cb) {
+    if (typeof cb !== 'function') return function () {};
+    if (!state.scrolling) {
+      cb();
+      return function () {};
+    }
+    state.scrollIdleCallbacks.add(cb);
+    return function () { state.scrollIdleCallbacks.delete(cb); };
+  }
+
+  function attachScrollShield(el) {
+    if (state.scrollShieldEl !== el) {
+      if (state.scrollShieldEl) {
+        state.scrollShieldEl.removeEventListener('scroll', onScrollActivity);
+        state.scrollShieldEl.removeEventListener('wheel', onScrollActivity);
+        state.scrollShieldEl.removeAttribute('data-gopt-scrolling');
+      }
+      clearScrollShield();
+      state.scrollShieldEl = el || null;
+      if (state.scrollShieldEl) {
+        state.scrollShieldEl.addEventListener('scroll', onScrollActivity, { passive: true });
+        state.scrollShieldEl.addEventListener('wheel', onScrollActivity, { passive: true });
+      }
+    }
+    if (el && !state.pointerDownBound) {
+      document.addEventListener('pointerdown', clearScrollShield, { passive: true });
+      state.pointerDownBound = true;
+    }
+  }
+
   function updateScrollBtn() {
     state.scrollBtnRaf = 0;
     ensureScrollBtn();
@@ -216,15 +293,17 @@
     if (!btn) return;
     const sc = scroller();
     if (!sc || !sc.isConnected) {
+      state.scrollBtnVisible = false;
       btn.classList.remove('is-visible');
-      toggle('gopt-has-scroll-bottom', false);
       return;
     }
     const dist = sc.scrollHeight - sc.scrollTop - sc.clientHeight;
     const show = dist > 80;
+    const wasVisible = state.scrollBtnVisible;
+    state.scrollBtnVisible = show;
     btn.classList.toggle('is-visible', show);
-    toggle('gopt-has-scroll-bottom', show);
     if (!show) return;
+    if (!state.scrollBtnPosDirty && state.lastBtnPos && wasVisible) return;
 
     const fullW = html.classList.contains('gopt-text-fullwidth');
     const fallbackPad = fullW ? 44 : 16;
@@ -250,6 +329,7 @@
     }
     left = Math.max(16, Math.min(window.innerWidth - 62, left));
     top = Math.max(8, Math.min(window.innerHeight - 62, top));
+    state.scrollBtnPosDirty = false;
     const key = left + '|' + top;
     if (key !== state.lastBtnPos) {
       state.lastBtnPos = key;
@@ -263,13 +343,20 @@
     state.scrollBtnRaf = requestAnimationFrame(updateScrollBtn);
   }
 
+  function onWindowResize() {
+    state.scrollBtnPosDirty = true;
+    scheduleScrollBtnUpdate();
+  }
+
   function startScrollBtnTrack(durationMs) {
+    state.scrollBtnPosDirty = true;
     const now = performance.now();
     const until = now + (durationMs || 360);
     if (until > state.scrollBtnTrackUntil) state.scrollBtnTrackUntil = until;
     if (state.scrollBtnTrackRaf) return;
     const step = function () {
       state.scrollBtnTrackRaf = 0;
+      state.scrollBtnPosDirty = true;
       updateScrollBtn();
       if (performance.now() < state.scrollBtnTrackUntil) {
         state.scrollBtnTrackRaf = requestAnimationFrame(step);
@@ -287,7 +374,10 @@
     }
     if (typeof ResizeObserver === 'function') {
       if (!state.scrollBtnRo) {
-        state.scrollBtnRo = new ResizeObserver(function () { startScrollBtnTrack(360); });
+        state.scrollBtnRo = new ResizeObserver(function () {
+          state.scrollBtnPosDirty = true;
+          startScrollBtnTrack(360);
+        });
       }
       const next = [
         sc,
@@ -313,6 +403,8 @@
   // ---------- refresh ----------
   function refresh() {
     state.refreshTimer = 0;
+    clearTimeout(state.streamWatchTimer);
+    state.streamWatchTimer = 0;
     cancelRefreshRaf();
     state.firstScheduledAt = 0;
     if (!state.chatRoot || !state.chatRoot.isConnected) {
@@ -320,7 +412,8 @@
       return;
     }
     const turns = Selectors.getTurns(state.chatRoot);
-    const wasEmpty = state.turnCount === 0;
+    const prevTurnCount = state.turnCount;
+    const wasEmpty = prevTurnCount === 0;
     state.turnCount = turns.length;
     applyTextOpt();
     if (wasEmpty && turns.length > 0 && state.coldLoading) {
@@ -329,16 +422,32 @@
     const lastIdx = turns.length - 1;
     const wasStreaming = state.streaming;
     state.streaming = lastIdx >= 0 && Selectors.isTurnStreaming(turns[lastIdx], true, document);
+    if (!state.scrolling && (turns.length !== prevTurnCount || state.forceTagAll || !state.streaming)) {
+      const katexCount = state.chatRoot.querySelectorAll ? state.chatRoot.querySelectorAll('.katex').length : 0;
+      state.latexHeavy = katexCount >= LATEX_HEAVY_THRESHOLD;
+      toggle('gopt-latex-heavy', state.latexHeavy);
+    }
+    if (state.streaming) {
+      state.streamWatchTimer = setTimeout(refresh, state.latexHeavy ? HEAVY_STREAM_WATCH_MS : STREAM_WATCH_MS);
+    }
     const states = Collapse.sync(turns, state.settings, { streamingIndex: state.streaming ? lastIdx : -1 });
     Navigator.update(turns, states);
     if (TokenTracker) {
-      TokenTracker.update({
+      const tokenArgs = {
         turns: turns,
         streaming: state.streaming,
         wasStreaming: wasStreaming,
         url: location.href,
         doc: document
-      });
+      };
+      const now = Date.now();
+      if (state.scrolling && !wasEmpty && !(wasStreaming && !state.streaming) && (now - state.lastTokenUpdateAt < 500)) {
+        state.pendingTokenArgs = tokenArgs;
+      } else {
+        state.pendingTokenArgs = null;
+        state.lastTokenUpdateAt = now;
+        TokenTracker.update(tokenArgs);
+      }
     }
 
     if (state.settings.hideSources) {
@@ -368,6 +477,8 @@
   function refreshNow() {
     clearTimeout(state.refreshTimer);
     state.refreshTimer = 0;
+    clearTimeout(state.streamWatchTimer);
+    state.streamWatchTimer = 0;
     cancelRefreshRaf();
     refresh();
   }
@@ -396,7 +507,10 @@
     const now = Date.now();
     if (!state.firstScheduledAt) state.firstScheduledAt = now;
     clearTimeout(state.refreshTimer);
-    const wait = Math.max(0, Math.min(DEBOUNCE_MS, state.firstScheduledAt + MAX_WAIT_MS - now));
+    const heavyStreaming = state.latexHeavy && state.streaming;
+    const debounceMs = heavyStreaming ? HEAVY_DEBOUNCE_MS : DEBOUNCE_MS;
+    const maxWaitMs = heavyStreaming ? HEAVY_MAX_WAIT_MS : MAX_WAIT_MS;
+    const wait = Math.max(0, Math.min(debounceMs, state.firstScheduledAt + maxWaitMs - now));
     state.refreshTimer = setTimeout(refresh, wait);
   }
 
@@ -441,6 +555,7 @@
     const found = Selectors.findChatScroller(document);
     if (!found) {
       state.chatRoot = null;
+      attachScrollShield(null);
       attachScrollBtnObservers();
       scheduleScrollBtnUpdate();
       if (TokenTracker) {
@@ -454,6 +569,7 @@
       return;
     }
     state.chatRoot = found;
+    attachScrollShield(found);
     state.observer = new MutationObserver(onMutations);
     state.observer.observe(found, { childList: true, subtree: true, characterData: false });
     state.forceTagAll = true;
@@ -466,15 +582,23 @@
     state.href = location.href;
     state.turnCount = 0;
     state.streaming = false;
+    state.latexHeavy = false;
+    toggle('gopt-latex-heavy', false);
     state.lastBtnPos = '';
+    state.scrollBtnPosDirty = true;
+    state.scrollBtnVisible = false;
+    state.pendingTokenArgs = null;
+    clearScrollShield();
+    attachScrollShield(null);
     clearTimeout(state.refreshTimer);
     state.refreshTimer = 0;
+    clearTimeout(state.streamWatchTimer);
+    state.streamWatchTimer = 0;
     cancelRefreshRaf();
     cancelDeferredTagging();
     beginColdLoadWindow(COLD_LOAD_MS);
     applyTextOpt();
     if (state.scrollBtn) state.scrollBtn.classList.remove('is-visible');
-    toggle('gopt-has-scroll-bottom', false);
     Collapse.reset();
     Navigator.reset();
     if (TokenTracker) TokenTracker.resetRoute();
@@ -507,7 +631,16 @@
     stopWaiting();
     cancelDeferredTagging();
     finishColdLoadWindow();
-    window.removeEventListener('resize', scheduleScrollBtnUpdate);
+    window.removeEventListener('resize', onWindowResize);
+    if (state.pointerDownBound) {
+      document.removeEventListener('pointerdown', clearScrollShield);
+      state.pointerDownBound = false;
+    }
+    state.pendingTokenArgs = null;
+    state.scrollIdleCallbacks.clear();
+    attachScrollShield(null);
+    state.latexHeavy = false;
+    toggle('gopt-latex-heavy', false);
     if (state.observer) { state.observer.disconnect(); state.observer = null; }
     if (state.themeObserver) { state.themeObserver.disconnect(); state.themeObserver = null; }
     if (state.scrollBtnRo) { state.scrollBtnRo.disconnect(); state.scrollBtnRo = null; }
@@ -515,6 +648,7 @@
     if (state.scrollEl) { state.scrollEl.removeEventListener('scroll', scheduleScrollBtnUpdate); state.scrollEl = null; }
     clearInterval(state.routeTimer); state.routeTimer = 0;
     clearTimeout(state.refreshTimer); state.refreshTimer = 0;
+    clearTimeout(state.streamWatchTimer); state.streamWatchTimer = 0;
     cancelRefreshRaf();
     clearTimeout(state.widthAnimTimer); state.widthAnimTimer = 0;
     if (state.scrollBtnRaf) { cancelAnimationFrame(state.scrollBtnRaf); state.scrollBtnRaf = 0; }
@@ -600,13 +734,16 @@
     applyRootClasses();
     Navigator.mount(document);
     if (TokenTracker) {
+      if (typeof TokenTracker.setScrollStateProvider === 'function') {
+        TokenTracker.setScrollStateProvider(function () { return state.scrolling; }, onScrollIdle);
+      }
       TokenTracker.setEnabled(state.settings.showTokenUsage !== false);
       TokenTracker.mount(document);
     }
     Navigator.onNavigate(goToTurn);
     Collapse.onStateChange(syncAfterCollapseChange);
     ensureScrollBtn();
-    window.addEventListener('resize', scheduleScrollBtnUpdate, { passive: true });
+    window.addEventListener('resize', onWindowResize, { passive: true });
     window.addEventListener('pagehide', cleanup);
     attachToChat();
     Settings.onSettingsChanged(function (next, prev) {

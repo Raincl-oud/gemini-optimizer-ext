@@ -96,6 +96,7 @@
     hover: -1, active: -1, onNav: null,
     io: null, ioRoot: null, scrollEl: null, ro: null, roTargets: [], intersecting: new Set(),
     placeRaf: 0, trackRaf: 0, trackUntil: 0, moveRaf: 0, tipTimer: 0,
+    cachedTextLeft: null, textLeftDirty: true, scrollOnlyPlace: true,
     tipVisible: false, mounted: false, lastPlace: ''
   };
 
@@ -139,8 +140,10 @@
     return tr.width > 0 ? tr.left : null;
   }
 
-  function place() {
+  function place(fromScrollArg) {
     S.placeRaf = 0;
+    const fromScroll = arguments.length > 0 ? fromScrollArg === true : S.scrollOnlyPlace;
+    S.scrollOnlyPlace = true;
     if (!S.rail) return;
     const d = S.doc;
     const vw = root.innerWidth, vh = root.innerHeight;
@@ -164,17 +167,23 @@
         firstOpenIdx = 0;
         lastOpenIdx = S.turnEls.length - 1;
       }
-      for (let i = firstOpenIdx; i <= lastOpenIdx; i++) {
-        if (!S.collapsed[i]) {
-          const l = measureContentLeft(S.turnEls[i]);
-          if (l !== null) { textLeft = l; break; }
+      if (fromScroll && !S.textLeftDirty && S.cachedTextLeft !== null) {
+        textLeft = S.cachedTextLeft;
+      } else {
+        for (let i = firstOpenIdx; i <= lastOpenIdx; i++) {
+          if (!S.collapsed[i]) {
+            const l = measureContentLeft(S.turnEls[i]);
+            if (l !== null) { textLeft = l; break; }
+          }
         }
-      }
-      if (textLeft === undefined) {
-        for (let i = 0; i < S.turnEls.length; i++) {
-          const l = measureContentLeft(S.turnEls[i]);
-          if (l !== null) { textLeft = l; break; }
+        if (textLeft === undefined) {
+          for (let i = 0; i < S.turnEls.length; i++) {
+            const l = measureContentLeft(S.turnEls[i]);
+            if (l !== null) { textLeft = l; break; }
+          }
         }
+        S.cachedTextLeft = textLeft !== undefined ? textLeft : null;
+        S.textLeftDirty = false;
       }
       const firstR = S.turnEls[firstOpenIdx].getBoundingClientRect();
       const lastR = S.turnEls[lastOpenIdx].getBoundingClientRect();
@@ -196,10 +205,14 @@
     S.rail.style.height = p.height + 'px';
   }
 
-  function schedulePlace() {
+  function schedulePlace(fromScroll) {
+    if (fromScroll !== true) S.scrollOnlyPlace = false;
     if (S.placeRaf) return;
-    S.placeRaf = root.requestAnimationFrame(place);
+    S.placeRaf = root.requestAnimationFrame(function () { place(); });
   }
+
+  function onScrollPlace() { schedulePlace(true); }
+  function onResizePlace() { S.textLeftDirty = true; schedulePlace(false); }
 
   function cancelTrack() {
     if (S.trackRaf) { root.cancelAnimationFrame(S.trackRaf); S.trackRaf = 0; }
@@ -207,6 +220,7 @@
   }
 
   function startSmoothTrack(durationMs) {
+    S.textLeftDirty = true;
     if (!S.mounted || typeof root.requestAnimationFrame !== 'function') return;
     const now = root.performance ? root.performance.now() : Date.now();
     const until = now + (durationMs || 360);
@@ -215,7 +229,8 @@
     const step = function () {
       S.trackRaf = 0;
       if (!S.mounted) return;
-      place();
+      S.textLeftDirty = true;
+      place(false);
       const t = root.performance ? root.performance.now() : Date.now();
       if (t < S.trackUntil) S.trackRaf = root.requestAnimationFrame(step);
     };
@@ -233,7 +248,10 @@
     const sidenav = s.queryFirst(S.doc, s.SEL.sidenav);
     const isAnchor = function (a) { return !!(a && (a === target || target.contains(a))); };
     const inSidenav = !!(sidenav && (sidenav === target || target.contains(sidenav) || sidenav.contains(target)));
-    if (isAnchor(scroller) || isAnchor(main) || inSidenav) startSmoothTrack(360);
+    if (isAnchor(scroller) || isAnchor(main) || inSidenav) {
+      S.textLeftDirty = true;
+      startSmoothTrack(360);
+    }
   }
 
   function applyTransforms() {
@@ -386,14 +404,15 @@
     });
     d.addEventListener('transitionstart', onDocTransition, { capture: true, passive: true });
     d.addEventListener('transitionrun', onDocTransition, { capture: true, passive: true });
-    root.addEventListener('resize', schedulePlace, { passive: true });
+    root.addEventListener('resize', onResizePlace, { passive: true });
 
     if (typeof root.ResizeObserver === 'function') {
-      S.ro = new root.ResizeObserver(function () { startSmoothTrack(360); });
+      S.ro = new root.ResizeObserver(function () { S.textLeftDirty = true; startSmoothTrack(360); });
       observeAnchors();
     }
     S.mounted = true;
-    schedulePlace();
+    S.textLeftDirty = true;
+    schedulePlace(false);
   }
 
   function observeAnchors() {
@@ -409,9 +428,9 @@
   function ensureSpy() {
     const scroller = Sel().findChatScroller(S.doc);
     if (scroller !== S.scrollEl) {
-      if (S.scrollEl) S.scrollEl.removeEventListener('scroll', schedulePlace);
+      if (S.scrollEl) S.scrollEl.removeEventListener('scroll', onScrollPlace);
       S.scrollEl = scroller;
-      if (S.scrollEl) S.scrollEl.addEventListener('scroll', schedulePlace, { passive: true });
+      if (S.scrollEl) S.scrollEl.addEventListener('scroll', onScrollPlace, { passive: true });
     }
     if (typeof root.IntersectionObserver !== 'function') return;
     if (S.io && S.ioRoot === scroller) return;
@@ -467,7 +486,8 @@
     if (S.hover >= n) setHover(-1, false);
     applyTransforms();
     observeAnchors();
-    schedulePlace();
+    S.textLeftDirty = true;
+    schedulePlace(false);
   }
 
   function setActive(index) {
@@ -497,7 +517,7 @@
     if (S.io) { S.io.disconnect(); S.io = null; S.ioRoot = null; }
     if (S.ro) S.ro.disconnect();
     S.roTargets = [];
-    if (S.scrollEl) { S.scrollEl.removeEventListener('scroll', schedulePlace); S.scrollEl = null; }
+    if (S.scrollEl) { S.scrollEl.removeEventListener('scroll', onScrollPlace); S.scrollEl = null; }
     S.intersecting.clear();
     S.turnIndex = new Map();
     S.turnEls = [];
@@ -510,6 +530,9 @@
     hideTip();
     S.rail.classList.remove('has-turns');
     S.lastPlace = '';
+    S.cachedTextLeft = null;
+    S.textLeftDirty = true;
+    S.scrollOnlyPlace = true;
   }
 
   function destroy() {
@@ -522,7 +545,7 @@
       S.doc.removeEventListener('transitionstart', onDocTransition, { capture: true });
       S.doc.removeEventListener('transitionrun', onDocTransition, { capture: true });
     }
-    root.removeEventListener('resize', schedulePlace);
+    root.removeEventListener('resize', onResizePlace);
     S.rail.remove();
     S.tip.remove();
     S.rail = S.list = S.tip = S.tipIdx = S.tipStatus = S.tipText = null;

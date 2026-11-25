@@ -120,7 +120,8 @@ html.gopt-text-fullwidth :is(
   infinite-scroller.chat-history, #chat-history, [data-test-id="chat-history-container"], main .chat-history,
   input-area-v2, .input-area-container, .bottom-container
 ) :is(div, section):not([role="button"]):not(.gopt-recollapse-btn):not(.gopt-collapsed-bar):not(.conversation-container, [data-gopt-turn], .input-area-container, .bottom-container):not(:is(
-  pre, code, code-block, table, button, img, svg, immersive-panel, [data-test-id*="canvas" i]
+  pre, code, code-block, table, button, img, svg, immersive-panel, [data-test-id*="canvas" i],
+  .markdown, .katex, .math-block, .math-inline
 ) *) {
   max-width: 100% !important;
 }
@@ -131,7 +132,10 @@ html.gopt-text-fullwidth :is(
 ) :is(div, section):has(> :is(
   .conversation-container, [data-gopt-turn], user-query, model-response,
   message-content, .markdown, .markdown-main-panel, rich-textarea, .text-input-field
-)):not([role="button"]):not(.conversation-container, [data-gopt-turn], .input-area-container, .bottom-container):not(:is(pre, code, code-block, table, button, img, svg, immersive-panel, [data-test-id*="canvas" i]) *) {
+)):not([role="button"]):not(.conversation-container, [data-gopt-turn], .input-area-container, .bottom-container):not(:is(
+  pre, code, code-block, table, button, img, svg, immersive-panel, [data-test-id*="canvas" i],
+  .markdown, .katex, .math-block, .math-inline
+) *) {
   margin-left: 0 !important;
   margin-right: 0 !important;
 }
@@ -174,9 +178,26 @@ html.gopt-cold-loading:not(.gopt-width-animating) :is(.conversation-container, [
   transition: none !important;
 }
 
+/* Intra-turn block virtualization for long/math-heavy responses (protects inline .katex baseline). */
+:is(.conversation-container, [data-gopt-turn]):not(.gopt-turn-collapsed):not(.gopt-turn-streaming)
+  :is(.markdown, .markdown-main-panel) > :is(p, div, ol, ul, blockquote, pre, code-block, table, .math-block, math-block) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+  overflow-clip-margin: 12px;
+}
+
+html.gopt-lite-latex .katex-mathml {
+  display: none !important;
+}
+
+/* Pause pointer hit-testing inside response content while scrolling (keeps bar & recollapse clickable). */
+[data-gopt-scrolling="1"] :is(.markdown, .markdown-main-panel) {
+  pointer-events: none !important;
+}
+
 /* Smooth transition active ONLY during the 280ms full-width toggle window (off during scroll/streaming). */
 @media (prefers-reduced-motion: no-preference) {
-  html.gopt-width-animating :is(
+  html.gopt-width-animating:not(.gopt-latex-heavy) :is(
     .conversation-container, [data-gopt-turn],
     user-query, user-query-content, .user-query-container, .query-content,
     model-response, response-container, div.response-container, div.presented-response-container,

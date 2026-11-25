@@ -49,7 +49,8 @@
     protected: ['model-thoughts', '.thoughts-container', '[data-test-id*="thought" i]',
       'immersive-entry-chip', 'tool-response', 'extension-response', '[data-test-id*="drive" i] .card',
       'gmail-card', 'drive-card', '[class*="attachment"]', 'code-block', 'pre', 'table',
-      'user-query']
+      'user-query', '.katex', '.katex-display', '.katex-html', '.katex-mathml',
+      '.math-inline', '.math-block', 'math-inline', 'math-block']
   });
 
   const PROSE_SEL = '.markdown p, .markdown li, .markdown td, .markdown h1, .markdown h2, .markdown h3, .markdown blockquote';
@@ -293,7 +294,8 @@
   }
 
   const scannedLen = new WeakMap();
-  const CANDIDATE_SEL = ':is(div,span,button,a,section):not([data-gopt-attribution]):not([data-gopt-owned])';
+  const KATEX_JOINED = '.katex,.katex-display,.katex-html,.katex-mathml,.math-inline,.math-block,math-inline,math-block';
+  const CANDIDATE_SEL = ':is(div,span,button,a,section):not([data-gopt-attribution]):not([data-gopt-owned]):not(.katex):not(.katex *):not(.math-inline):not(.math-inline *):not(.math-block):not(.math-block *):not(math-inline):not(math-inline *):not(math-block):not(math-block *)';
 
   function classify(el) {
     const tag = el.tagName.toLowerCase();
@@ -323,12 +325,21 @@
       const responses = queryAll(r, SEL.modelResponse);
       if (r.matches && r.matches(SEL.modelResponse[0])) responses.unshift(r);
       for (const resp of responses) {
+        if ((resp.getAttribute && resp.getAttribute('aria-busy') === 'true') ||
+            (resp.classList && resp.classList.contains('is-loading')) ||
+            (resp.closest && resp.closest('.gopt-turn-streaming') !== null) ||
+            (resp.querySelector && resp.querySelector('[aria-busy="true"], .is-loading, pending-request') !== null)) {
+          continue;
+        }
         const len = (resp.textContent || '').length;
         if (scannedLen.get(resp) === len) continue;
         scannedLen.set(resp, len);
         let cands;
         try { cands = resp.querySelectorAll(CANDIDATE_SEL); } catch (_) { continue; }
         for (const el of cands) {
+          if (el.closest) {
+            try { if (el.closest(KATEX_JOINED) !== null) continue; } catch (_) { /* ignore */ }
+          }
           if (el.childElementCount > 6) continue;
           if ((el.textContent || '').length > 140) continue;
           if (isProtected(el)) continue;

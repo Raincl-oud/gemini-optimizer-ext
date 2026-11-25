@@ -25,6 +25,7 @@
     openPastChats: 4,
     hideSources: true,
     showTokenUsage: true,
+    liteLatex: false,
     textOpt: DEFAULT_TEXT_OPT
   });
 
@@ -82,6 +83,7 @@
       openPastChats: normalizeOpenPastChats(rawPast),
       hideSources: bool(r.hideSources, d.hideSources),
       showTokenUsage: bool(r.showTokenUsage, d.showTokenUsage),
+      liteLatex: bool(r.liteLatex, d.liteLatex),
       textOpt: normalizeTextOpt(r.textOpt)
     };
   }

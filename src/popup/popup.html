@@ -63,9 +63,16 @@
     <div class="row">
       <div class="text">
         <label class="label" for="showTokenUsage">Token Usage</label>
-        <p class="desc" id="showTokenUsage-desc">Context bar, auto-detected plan &amp; daily/weekly quota</p>
+        <p class="desc" id="showTokenUsage-desc">Context bar, plan &amp; official 5h/weekly usage</p>
       </div>
       <button type="button" role="switch" id="showTokenUsage" class="switch" aria-checked="true" aria-describedby="showTokenUsage-desc"><span class="track"><span class="thumb"></span></span></button>
+    </div>
+    <div class="row">
+      <div class="text">
+        <label class="label" for="liteLatex">Lite LaTeX Render</label>
+        <p class="desc" id="liteLatex-desc">Hide hidden MathML tree for faster heavy math (Copy button still works)</p>
+      </div>
+      <button type="button" role="switch" id="liteLatex" class="switch" aria-checked="false" aria-describedby="liteLatex-desc"><span class="track"><span class="thumb"></span></span></button>
     </div>
 
     <div class="accordion" id="textOpt-accordion">

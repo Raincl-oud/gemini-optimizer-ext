@@ -1,8 +1,22 @@
 # Version Tracker
 
-Current: **1.25.26**
+Current: **1.30.32**
 
 ## History
+- 2026-11-25 | **1.30.32** (from 1.27.30) | `+0M +3m +2f` | Reset-Time Engine (provisional fixed-window + mathematical solver + clickable refresh) and 60fps LaTeX Optimization
+  - `minor`: Add fixed-window provisional reset anchor on answer completion with automatic server-time snapping and preservation across 0% /usage scrapes
+  - `minor`: Add clickable Token Usage bar manual /usage refresh with syncing state and scroll-aware post-answer sync deferral
+  - `minor`: Add automatic LaTeX Heavy Auto-Guard (>= 50 KaTeX formulas) and optional Lite LaTeX Render Popup toggle to hide duplicate MathML trees
+  - `fix`: Upgrade parseResetTimestamp to a mathematical window-bounds solver across 12h/24h formats, Indonesian dot-times, midnight rollover, and weekly year wrap
+  - `fix`: Eliminate KaTeX render and scroll lag across selectors.js, CSS wildcard removal, intra-turn block content-visibility, settled measureTurns/navigator/scrollBtn caches, and markdown scroll hit-test shield
+- 2026-11-20 | **1.27.30** (from 1.27.27) | `+0M +0m +3f` | Fix post-answer /usage auto-sync reliability after a single Gemini response
+  - `fix`: Add 450ms streamWatchTimer while streaming in main.js so stopButton removal outside chatRoot always transitions streaming true to false
+  - `fix`: Detect newly completed answers via last-turn signature (including fast replies, 1-word replies, and Home-to-new-chat Turn 1) and prevent stale wasStreaming replay in token-tracker.js
+  - `fix`: Preserve custom Angular element line breaks in /usage scraper and extend background tab timeouts (14s/16s) with 1800ms post-answer settle delay
+- 2026-11-20 | **1.27.27** (from 1.25.26) | `+0M +2m +1f` | Replace heuristic quota estimation with official gemini.google.com/usage background sync (5h & Weekly % used)
+  - `minor`: Add MV3 background service worker (src/background/usage-sync.js) and /usage DOM scraper to automatically sync official Google 5-hour and weekly usage, plan tier, and reset timestamps on install and after every Gemini response
+  - `minor`: Switch Token Usage bar and tooltip to official % used (5h & Week) with live chrome.storage.onChanged updates and local clock auto-reset to 0% when reset timestamps pass
+  - `fix`: Replace inaccurate local 24h/7d compute heuristic with bilingual ID/EN /usage parser scoped to bard-sidenav-content and immune to upsell cards
 - 2026-11-19 | **1.25.26** (from 1.25.25) | `+0M +0m +1f` | Increase Token Usage meter bar height to 10px
   - `fix`: Increase Token Usage progress meter height by 5px to 10px
 - 2026-11-19 | **1.25.25** (from 1.25.24) | `+0M +0m +1f` | Left-align Token Usage text and stretch 5px bar across right width

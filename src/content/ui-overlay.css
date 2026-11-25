@@ -40,7 +40,7 @@ html.gopt-dark {
 
 /* ---------- collapsed Past Chats (zero dark gap, tight 2px rhythm) ---------- */
 .gopt-turn-collapsed,
-:is(div, section, article):has(> .gopt-turn-collapsed) {
+:is(infinite-scroller.chat-history, #chat-history, [data-test-id="chat-history-container"], main .chat-history) > :is(div, section, article):has(> .gopt-turn-collapsed) {
   content-visibility: visible !important;
   contain-intrinsic-size: none !important;
   min-height: 0 !important;
@@ -86,6 +86,9 @@ html.gopt-dark {
     opacity: 0;
     transform: translateY(-4px);
   }
+}
+html.gopt-latex-heavy .gopt-turn-manual-open > :not(.gopt-recollapse-btn):not(.gopt-collapsed-bar) {
+  transition: none;
 }
 
 .gopt-collapsed-bar {
@@ -439,14 +442,16 @@ html.gopt-active.gopt-token-bar-active :is(
   white-space: nowrap;
   overflow: hidden;
   color: var(--gopt-fg-2);
-  cursor: default;
+  cursor: pointer;
   opacity: 0;
-  transition-property: opacity, color;
+  transition-property: opacity, color, background-color, transform;
   transition-duration: var(--gopt-dur-fast);
   transition-timing-function: var(--gopt-ease-out);
 }
 html.gopt-active .gopt-token-bar { display: flex; pointer-events: none; }
 html.gopt-active .gopt-token-bar.is-visible { opacity: 1; pointer-events: auto; }
+.gopt-token-bar:active { transform: scale(0.992); }
+.gopt-token-bar.is-syncing .gopt-tk-meter { opacity: 0.55; }
 .gopt-token-bar:focus-visible { outline: 2px solid var(--gopt-focus); outline-offset: 1px; }
 
 .gopt-tk-meter {
@@ -573,6 +578,10 @@ html.gopt-active .gopt-token-bar.is-visible { opacity: 1; pointer-events: auto; 
     transition-duration: 150ms;
     transform: none;
   }
+  .gopt-token-bar {
+    transition-property: opacity, color, background-color;
+  }
+  .gopt-token-bar:active { transform: none; }
   .gopt-tooltip,
   .gopt-token-tooltip,
   .gopt-scroll-bottom-btn {
@@ -597,24 +606,24 @@ html.gopt-hide-sources :is(
 }
 
 /* ---------- light render (always-on; yields during html.gopt-width-animating) ---------- */
-html.gopt-light-render:not(.gopt-width-animating) :is(model-response, message-content, .markdown) * {
+html.gopt-light-render:not(.gopt-width-animating) :is(model-response, message-content, response-container, .response-container, .presented-response-container) {
   animation: none !important;
   transition: none !important;
 }
-html.gopt-light-render :is(main, chat-window, model-response, .chat-history) * {
+html.gopt-light-render :is(main, chat-window, .chat-container, .bottom-container, input-area-v2, bard-sidenav, header) {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 html.gopt-light-render .gopt-strip-bar { transition-duration: 120ms; }
 
-/* ---------- text optimization (independent per field; syncs .gopt-collapsed-bar; protects pre/code/code-block/table) ---------- */
-html.gopt-font-sans :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote, strong, em), user-query, user-query .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+/* ---------- text optimization (independent per field; syncs .gopt-collapsed-bar; protects pre/code/code-block/table/katex) ---------- */
+html.gopt-font-sans :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote, strong, em), user-query, user-query .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table, .katex, .katex-display, .math-inline, .math-block) *) {
   font-family: "Google Sans Text", "Google Sans", Inter, Roboto, system-ui, sans-serif !important;
 }
-html.gopt-font-serif :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote, strong, em), user-query, user-query .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+html.gopt-font-serif :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote, strong, em), user-query, user-query .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table, .katex, .katex-display, .math-inline, .math-block) *) {
   font-family: Georgia, "Source Serif 4", "Times New Roman", serif !important;
 }
-html.gopt-font-mono :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote, strong, em), user-query, user-query .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+html.gopt-font-mono :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote, strong, em), user-query, user-query .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table, .katex, .katex-display, .math-inline, .math-block) *) {
   font-family: "JetBrains Mono", "Fira Code", Consolas, monospace !important;
 }
 :is(html.gopt-font-sans, html.gopt-font-serif, html.gopt-font-mono) :is(model-response, user-query) :is(table, table *) {
@@ -623,21 +632,21 @@ html.gopt-font-mono :is(model-response .markdown, model-response .markdown :is(p
 :is(html.gopt-font-sans, html.gopt-font-serif, html.gopt-font-mono) :is(model-response, user-query) :is(pre, code, code-block, pre *, code *, code-block *) {
   font-family: "JetBrains Mono", "Fira Code", Consolas, ui-monospace, monospace !important;
 }
-html.gopt-text-size :is(model-response .markdown, model-response .markdown :is(p, li, blockquote), user-query, .query-text, .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+html.gopt-text-size :is(model-response .markdown, model-response .markdown :is(p, li, blockquote), user-query, .query-text, .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table, .katex, .katex-display, .math-inline, .math-block) *) {
   font-size: var(--gopt-font-size) !important;
 }
 html.gopt-text-size :is(model-response pre, model-response code, model-response code-block) {
   font-size: calc(var(--gopt-font-size) * 0.88) !important;
 }
-html.gopt-text-lh :is(model-response .markdown, model-response .markdown :is(p, li, blockquote), user-query, .query-text, .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+html.gopt-text-lh :is(model-response .markdown, model-response .markdown :is(p, li, blockquote), user-query, .query-text, .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table, .katex, .katex-display, .math-inline, .math-block) *) {
   line-height: var(--gopt-line-height) !important;
 }
-html.gopt-text-gap :is(model-response .markdown p, model-response .markdown ul, model-response .markdown ol, model-response .markdown blockquote):not(:is(pre, code, code-block, table) *) {
+html.gopt-text-gap :is(model-response .markdown p, model-response .markdown ul, model-response .markdown ol, model-response .markdown blockquote):not(:is(pre, code, code-block, table, .katex, .katex-display, .math-inline, .math-block) *) {
   margin-bottom: var(--gopt-paragraph-gap) !important;
 }
-html.gopt-text-ls :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote), user-query, .query-text, .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table) *) {
+html.gopt-text-ls :is(model-response .markdown, model-response .markdown :is(p, li, h1, h2, h3, h4, blockquote), user-query, .query-text, .query-text-line, .gopt-collapsed-bar):not(:is(pre, code, code-block, table, .katex, .katex-display, .math-inline, .math-block) *) {
   letter-spacing: var(--gopt-letter-spacing) !important;
 }
-html.gopt-text-ls :is(model-response, user-query) :is(pre, code, code-block, table, pre *, code *, code-block *, table *) {
+html.gopt-text-ls :is(model-response, user-query) :is(pre, code, code-block, table, pre *, code *, code-block *, table *, .katex, .katex *) {
   letter-spacing: normal !important;
 }

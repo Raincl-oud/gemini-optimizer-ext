@@ -36,6 +36,7 @@ const Collapse = require('../src/content/collapse-manager.js');
 const Nav = require('../src/content/strip-navigator.js');
 const Early = require('../src/content/early-boot.js');
 const TokenTracker = require('../src/content/token-tracker.js');
+const UsageSync = require('../src/background/usage-sync.js');
 
 // ---------- settings ----------
 check('settings: contentWidth defaults, fullWidth & DEFAULT_TYPOGRAPHY_RESET', () => {
@@ -50,10 +51,12 @@ check('settings: contentWidth defaults, fullWidth & DEFAULT_TYPOGRAPHY_RESET', (
     fullWidth: true, contentWidth: 100, fontFamily: 'default', fontSize: null, lineHeight: null, paragraphGap: null, letterSpacing: null
   });
   assert.deepEqual(Settings.DEFAULT_SETTINGS, {
-    autoCollapse: true, openPastChats: 4, hideSources: true, showTokenUsage: true, textOpt: Settings.DEFAULT_TEXT_OPT
+    autoCollapse: true, openPastChats: 4, hideSources: true, showTokenUsage: true, liteLatex: false, textOpt: Settings.DEFAULT_TEXT_OPT
   });
   assert.equal(Settings.normalizeSettings({ showTokenUsage: false }).showTokenUsage, false);
   assert.equal(Settings.normalizeSettings({ showTokenUsage: 'no' }).showTokenUsage, true);
+  assert.equal(Settings.normalizeSettings({ liteLatex: true }).liteLatex, true);
+  assert.equal(Settings.normalizeSettings({ liteLatex: 'yes' }).liteLatex, false);
   assert.equal(Settings.resolveLightRenderActive, undefined);
   assert.equal(Settings.OPEN_TURN_LIMITS, undefined);
 });
@@ -462,8 +465,9 @@ check('manifest: MV3 + semver version', () => {
   assert.equal(manifest.manifest_version, 3);
   assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
 });
-check('manifest: every referenced file exists; ui-overlay at document_start', () => {
-  const files = [manifest.action.default_popup, ...Object.values(manifest.action.default_icon), ...Object.values(manifest.icons)];
+check('manifest: every referenced file exists; background SW + document_start/end bundles valid', () => {
+  assert.ok(manifest.background && manifest.background.service_worker === 'src/background/usage-sync.js');
+  const files = [manifest.background.service_worker, manifest.action.default_popup, ...Object.values(manifest.action.default_icon), ...Object.values(manifest.icons)];
   for (const cs of manifest.content_scripts) files.push(...(cs.css || []), ...(cs.js || []));
   for (const f of files) assert.ok(fs.existsSync(p(f)), 'missing: ' + f);
   const start = manifest.content_scripts.find((c) => c.run_at === 'document_start');
@@ -544,7 +548,8 @@ check('guardrails: popup English UI, crisp logo, contentWidth slider, no preview
   assert.ok(/id="openPastChats"[^>]*type="number"|type="number"[^>]*id="openPastChats"/.test(popupHtml));
   assert.ok(popupHtml.includes('id="openPastDec"') && popupHtml.includes('id="openPastInc"'));
   assert.ok(popupHtml.includes('id="openPastChats-wrap"') && popupHtml.includes('acc-collapse'));
-  assert.ok(popupHtml.includes('id="showTokenUsage"') && popupHtml.includes('Token Usage'));
+  assert.ok(popupHtml.includes('id="showTokenUsage"') && popupHtml.includes('Token Usage') && popupHtml.includes('official 5h/weekly usage'));
+  assert.ok(popupHtml.includes('id="liteLatex"') && popupHtml.includes('Lite LaTeX Render') && popupHtml.includes('aria-checked="false"'));
   assert.ok(popupHtml.includes('id="textFullWidth"') && popupHtml.includes('Full Width'));
   assert.ok(popupHtml.includes('id="contentWidth-wrap"') && popupHtml.includes('id="contentWidth"') && popupHtml.includes('min="60" max="100"'));
   assert.ok(popupHtml.includes('id="textOpt-panel"') && popupHtml.includes('id="resetTextOpt"') && popupHtml.includes('Reset Typography'));
@@ -608,7 +613,7 @@ check('ui-overlay: light-render width gating, bar-index, tooltip status, startin
   assert.ok(/\.gopt-bar-index\s*\{/.test(overlay));
   assert.ok(/\.gopt-tooltip-head\s*\{/.test(overlay) && /\.gopt-tooltip-status\s*\{/.test(overlay));
   assert.ok(/\.gopt-turn-manual-open\s*>/.test(overlay) && /@starting-style/.test(overlay));
-  assert.ok(/\.gopt-turn-collapsed,\s*:is\(div, section, article\):has\(> \.gopt-turn-collapsed\)/.test(overlay));
+  assert.ok(/\.gopt-turn-collapsed,\s*:is\(infinite-scroller\.chat-history, #chat-history, \[data-test-id="chat-history-container"\], main \.chat-history\) > :is\(div, section, article\):has\(> \.gopt-turn-collapsed\)/.test(overlay));
   assert.ok(/row-gap:\s*2px !important/.test(overlay));
   assert.ok(/:not\(\.gopt-turn-collapsed\)\s*\{\s*margin-bottom:\s*20px !important/.test(overlay));
   assert.ok(/\.gopt-collapsed-bar\s*\{[^}]*min-height:\s*44px;[^}]*margin:\s*1px 0 !important/s.test(overlay));
@@ -625,12 +630,12 @@ check('ui-overlay: light-render width gating, bar-index, tooltip status, startin
 
 // ---------- early-boot & cold-load optimization (Stages 1-3) ----------
 check('early-boot: parseEarlyMirror, readEarlyMirror & writeEarlyMirror parity + resilience', () => {
-  assert.deepEqual(Early.DEFAULT_EARLY, { autoCollapse: true, openPastChats: 4, hideSources: true });
+  assert.deepEqual(Early.DEFAULT_EARLY, { autoCollapse: true, openPastChats: 4, hideSources: true, liteLatex: false });
   assert.deepEqual(Early.parseEarlyMirror(null), Early.DEFAULT_EARLY);
   assert.deepEqual(Early.parseEarlyMirror('{bad json'), Early.DEFAULT_EARLY);
   assert.deepEqual(Early.parseEarlyMirror([]), Early.DEFAULT_EARLY);
-  assert.deepEqual(Early.parseEarlyMirror({ autoCollapse: false, openPastChats: -0, hideSources: false }), {
-    autoCollapse: false, openPastChats: 0, hideSources: false
+  assert.deepEqual(Early.parseEarlyMirror({ autoCollapse: false, openPastChats: -0, hideSources: false, liteLatex: true }), {
+    autoCollapse: false, openPastChats: 0, hideSources: false, liteLatex: true
   });
   assert.equal(Object.is(Early.parseEarlyMirror({ openPastChats: -0 }).openPastChats, -0), false);
   assert.equal(Early.parseEarlyMirror({ openPastChats: 1500 }).openPastChats, 999);
@@ -641,12 +646,12 @@ check('early-boot: parseEarlyMirror, readEarlyMirror & writeEarlyMirror parity +
 
   const mem = {};
   const ls = { getItem: (k) => mem[k] || null, setItem: (k, v) => { mem[k] = v; } };
-  const written = Early.writeEarlyMirror({ autoCollapse: false, openPastChats: 7.9, hideSources: false, extra: 1 }, ls);
-  assert.deepEqual(written, { autoCollapse: false, openPastChats: 7, hideSources: false });
+  const written = Early.writeEarlyMirror({ autoCollapse: false, openPastChats: 7.9, hideSources: false, liteLatex: true, extra: 1 }, ls);
+  assert.deepEqual(written, { autoCollapse: false, openPastChats: 7, hideSources: false, liteLatex: true });
   assert.deepEqual(Early.readEarlyMirror(ls), written);
 
   const badLs = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('quota'); } };
-  assert.deepEqual(Early.writeEarlyMirror({ openPastChats: 9 }, badLs), { autoCollapse: true, openPastChats: 9, hideSources: true });
+  assert.deepEqual(Early.writeEarlyMirror({ openPastChats: 9 }, badLs), { autoCollapse: true, openPastChats: 9, hideSources: true, liteLatex: false });
   assert.deepEqual(Early.readEarlyMirror(badLs), Early.DEFAULT_EARLY);
 });
 
@@ -694,17 +699,17 @@ check('early-boot: applyPrewrap (head===null fallback, no gopt-text-fullwidth) &
     createElement: () => styleNode
   };
 
-  Early.applyPrewrap(mockDoc, { autoCollapse: true, openPastChats: 2, hideSources: true });
+  Early.applyPrewrap(mockDoc, { autoCollapse: true, openPastChats: 2, hideSources: true, liteLatex: true });
   assert.equal(rootChildren.length, 1);
   assert.equal(styleNode.id, Early.PREWRAP_STYLE_ID);
   assert.equal(attrs['data-gopt-owned'], '');
   assert.ok(styleNode.textContent.includes('nth-last-child(n + 4 of .conversation-container)'));
-  assert.ok(classes.has('gopt-prewrap') && classes.has('gopt-hide-sources') && classes.has('gopt-light-render'));
+  assert.ok(classes.has('gopt-prewrap') && classes.has('gopt-hide-sources') && classes.has('gopt-light-render') && classes.has('gopt-lite-latex'));
   assert.ok(!classes.has('gopt-text-fullwidth'), 'early-boot must never set gopt-text-fullwidth');
 
-  Early.applyPrewrap(mockDoc, { autoCollapse: false, openPastChats: 2, hideSources: false });
+  Early.applyPrewrap(mockDoc, { autoCollapse: false, openPastChats: 2, hideSources: false, liteLatex: false });
   assert.equal(rootChildren.length, 0);
-  assert.ok(!classes.has('gopt-prewrap') && !classes.has('gopt-hide-sources'));
+  assert.ok(!classes.has('gopt-prewrap') && !classes.has('gopt-hide-sources') && !classes.has('gopt-lite-latex'));
 
   const timers = new Map();
   let nextId = 1;
@@ -774,7 +779,7 @@ check('token-tracker: estimateTokens, formatCompactTokens & formatCountdown', ()
   assert.equal(TokenTracker.formatCountdown((6 * 24 + 23) * 3600000), '6d 23h');
 });
 
-check('token-tracker: bilingual plan badge, model tier, weight & resolvePlan priority', () => {
+check('token-tracker: bilingual plan badge, model tier, resolvePlan priority & dead heuristics removed', () => {
   assert.equal(TokenTracker.classifyPlanText('AI Ultra'), 'ultra');
   assert.equal(TokenTracker.classifyPlanText('AI Pro'), 'pro');
   assert.equal(TokenTracker.classifyPlanText('Gemini Advanced'), 'pro');
@@ -791,98 +796,160 @@ check('token-tracker: bilingual plan badge, model tier, weight & resolvePlan pri
   assert.equal(TokenTracker.classifyModelTierText('Tinggi'), 'pro');
   assert.equal(TokenTracker.classifyModelTierText('Deep Research'), 'pro');
   assert.equal(TokenTracker.classifyModelTierText('2.5 Flash'), 'free');
-  assert.equal(TokenTracker.detectModelWeight('Deep Research'), 3.0);
-  assert.equal(TokenTracker.detectModelWeight('Hydrogen Tinggi'), 1.6);
-  assert.equal(TokenTracker.detectModelWeight('Thinking'), 1.6);
-  assert.equal(TokenTracker.detectModelWeight('Fast'), 1.0);
   assert.equal(TokenTracker.classifyPlanText('Pro'), 'pro');
 
   assert.deepEqual(TokenTracker.resolvePlan({ badgePlan: 'ultra', modelPlan: 'free', storedPlan: 'free' }), { plan: 'ultra', confidence: 'high' });
   assert.deepEqual(TokenTracker.resolvePlan({ badgePlan: null, modelPlan: 'free', storedPlan: 'pro' }), { plan: 'pro', confidence: 'stored' });
   assert.deepEqual(TokenTracker.resolvePlan({ badgePlan: null, modelPlan: 'pro', storedPlan: 'free' }), { plan: 'pro', confidence: 'model' });
   assert.deepEqual(TokenTracker.resolvePlan({ badgePlan: null, modelPlan: null, storedPlan: null }), { plan: 'free', confidence: 'default' });
+
+  // Dead local compute-unit heuristic exports must stay deleted.
+  for (const dead of ['DAY_MS', 'WEEK_MS', 'MAX_CONV_ENTRIES', 'DAILY_BASE_UNITS', 'WEEKLY_BASE_UNITS', 'MODEL_WEIGHTS', 'detectModelWeight', 'extractConversationId', 'recordConversationUsage', 'computeRemainingLevel']) {
+    assert.equal(TokenTracker[dead], undefined, 'dead symbol still exported: ' + dead);
+  }
+  assert.equal(TokenTracker.PLAN_SPECS.pro.dailyBudget, undefined);
 });
 
-check('token-tracker: anti-double-count hydration, new-chat Turn #1, rolling 24h/7d expiry & LRU cap', () => {
-  const t0 = 1_700_000_000_000;
-  let store = TokenTracker.normalizeUsageStore(null, t0);
-  // Existing populated chat hydration charges 0.
-  const rHydrate = TokenTracker.recordConversationUsage(store, {
-    convId: 'oldChat1', turnCount: 12, chatTokens: 8000, modelWeight: 1.6, isHydrated: false, now: t0, plan: 'pro', planConfidence: 'high'
-  });
-  store = rHydrate.store;
-  assert.equal(rHydrate.deltaTokens, 0);
-  assert.equal(rHydrate.chargedUnits, 0);
-  assert.equal(store.dailyUsed, 0);
-  assert.equal(store.conversations.oldChat1.maxTokens, 8000);
+check('token-tracker: parseResetTimestamp ID/EN dot-time, 12h noon ambiguity, midnight & year wrap', () => {
+  const noon = new Date(2026, 10, 20, 12, 34, 0, 0).getTime();
+  const resNoon = TokenTracker.parseResetTimestamp('Direset pukul 3.42', noon, '5h');
+  const dNoon = new Date(resNoon);
+  assert.equal(dNoon.getDate(), 20);
+  assert.equal(dNoon.getHours(), 15);
+  assert.equal(dNoon.getMinutes(), 42);
 
-  // Follow-up turn charges delta weighted compute units.
-  const rNext = TokenTracker.recordConversationUsage(store, {
-    convId: 'oldChat1', turnCount: 13, chatTokens: 9000, modelWeight: 1.6, isHydrated: true, now: t0 + 5000
-  });
-  store = rNext.store;
-  assert.equal(rNext.deltaTokens, 1000);
-  assert.equal(rNext.chargedUnits, Math.round((9000 + 1000 * 2) * 1.6));
-  assert.equal(store.dailyUsed, rNext.chargedUnits);
-  assert.equal(store.weeklyUsed, rNext.chargedUnits);
+  const night = new Date(2026, 10, 20, 23, 30, 0, 0).getTime();
+  const resNight = TokenTracker.parseResetTimestamp('Direset pukul 3.42', night, '5h');
+  const dNight = new Date(resNight);
+  assert.equal(dNight.getDate(), 21);
+  assert.equal(dNight.getHours(), 3);
+  assert.equal(dNight.getMinutes(), 42);
 
-  // Brand-new chat pre-seeded at 0 during streaming properly charges Turn #1 once finished.
-  const rSeed = TokenTracker.recordConversationUsage(store, {
-    convId: 'newChat1', turnCount: 0, chatTokens: 0, modelWeight: 1.0, isHydrated: true, now: t0 + 6000
-  });
-  store = rSeed.store;
-  const rTurn1 = TokenTracker.recordConversationUsage(store, {
-    convId: 'newChat1', turnCount: 1, chatTokens: 500, modelWeight: 1.0, isHydrated: true, now: t0 + 9000
-  });
-  store = rTurn1.store;
-  assert.equal(rTurn1.deltaTokens, 500);
-  assert.equal(rTurn1.chargedUnits, 1500);
+  const res24 = TokenTracker.parseResetTimestamp('Direset pada 24 Nov pukul 13.42', noon, 'weekly');
+  const d24 = new Date(res24);
+  assert.equal(d24.getMonth(), 10);
+  assert.equal(d24.getDate(), 24);
+  assert.equal(d24.getHours(), 13);
+  assert.equal(d24.getMinutes(), 42);
 
-  // 24h rolling daily resets while 7d weekly persists until +7d.
-  const afterDay = TokenTracker.normalizeUsageStore(store, t0 + 5000 + TokenTracker.DAY_MS);
-  assert.equal(afterDay.dailyUsed, 0);
-  assert.equal(afterDay.dailyStart, 0);
-  assert.ok(afterDay.weeklyUsed > 0);
-  const afterWeek = TokenTracker.normalizeUsageStore(afterDay, t0 + 5000 + TokenTracker.WEEK_MS);
-  assert.equal(afterWeek.weeklyUsed, 0);
-  assert.equal(afterWeek.weeklyStart, 0);
+  const decLate = new Date(2026, 11, 30, 10, 0, 0, 0).getTime();
+  const resJan = TokenTracker.parseResetTimestamp('Resets on Jan 4 at 9:00 AM', decLate, 'weekly');
+  const dJan = new Date(resJan);
+  assert.equal(dJan.getFullYear(), 2027);
+  assert.equal(dJan.getMonth(), 0);
+  assert.equal(dJan.getDate(), 4);
+  assert.equal(dJan.getHours(), 9);
 
-  // LRU conversation cap (200 entries).
-  const many = {};
-  for (let i = 0; i < 210; i++) many['c' + i] = { maxTokens: 100, turnCount: 1, updatedAt: t0 + i };
-  const pruned = TokenTracker.normalizeUsageStore({ conversations: many }, t0 + 500);
-  assert.equal(Object.keys(pruned.conversations).length, TokenTracker.MAX_CONV_ENTRIES);
-  assert.ok(!('c0' in pruned.conversations) && 'c209' in pruned.conversations);
+  const resRel = TokenTracker.parseResetTimestamp('Direset dalam 4 jam 12 menit', noon, '5h');
+  assert.equal(resRel, noon + (4 * 60 + 12) * 60000);
 });
 
-check('token-tracker: snapshot thresholds, limit banner, selectors & CSS/main contracts', () => {
+check('token-tracker: parseUsagePageText ID & EN official /usage layouts + upsell immunity', () => {
+  const noon = new Date(2026, 10, 20, 12, 34, 0, 0).getTime();
+  const idText = [
+    'Batas penggunaan',
+    'PRO',
+    'Penggunaan saat ini',
+    'info',
+    '12% digunakan',
+    'Direset pukul 3.42',
+    'Batas mingguan',
+    'Direset pada 24 Nov pukul 13.42',
+    '7% digunakan',
+    'Dapatkan penggunaan 5x lebih banyak dengan AI Ultra',
+    'Upgrade'
+  ].join('\n');
+  const parsedId = TokenTracker.parseUsagePageText(idText, noon);
+  assert.equal(parsedId.detectedPlan, 'pro', 'must ignore upsell AI Ultra / Upgrade');
+  assert.equal(parsedId.window5hPct, 12);
+  assert.equal(parsedId.weeklyPct, 7);
+  assert.equal(new Date(parsedId.window5hResetAt).getHours(), 15);
+  assert.equal(new Date(parsedId.weeklyResetAt).getDate(), 24);
+
+  const enText = [
+    'Usage limits',
+    'AI Pro',
+    'Current usage',
+    '12% used',
+    'Resets at 3:42 PM',
+    'Weekly limit',
+    'Resets on Nov 24 at 1:42 PM',
+    '7% used',
+    'Get 5x more usage with AI Ultra',
+    'Upgrade'
+  ].join('\n');
+  const parsedEn = TokenTracker.parseUsagePageText(enText, noon);
+  assert.equal(parsedEn.detectedPlan, 'pro');
+  assert.equal(parsedEn.window5hPct, 12);
+  assert.equal(parsedEn.weeklyPct, 7);
+  assert.equal(new Date(parsedEn.window5hResetAt).getHours(), 15);
+  assert.equal(new Date(parsedEn.weeklyResetAt).getHours(), 13);
+
+  const leftText = 'Usage limits\nFree\nCurrent usage\n88% left\nResets in 2 hours\nWeekly limit\n93% remaining\n';
+  const parsedLeft = TokenTracker.parseUsagePageText(leftText, noon);
+  assert.equal(parsedLeft.detectedPlan, 'free');
+  assert.equal(parsedLeft.window5hPct, 12);
+  assert.equal(parsedLeft.weeklyPct, 7);
+
+  const idleText = 'Usage limits\nAI Plus\nCurrent usage\n0% used\nWeekly limit\n0% used';
+  const parsedIdle = TokenTracker.parseUsagePageText(idleText, noon);
+  assert.equal(parsedIdle.detectedPlan, 'plus');
+  assert.equal(parsedIdle.window5hPct, 0);
+  assert.equal(parsedIdle.window5hResetAt, 0);
+  assert.equal(parsedIdle.weeklyPct, 0);
+});
+
+check('token-tracker: unsynced/synced snapshots, local expiry reset, uniform % used levels & limit guard', () => {
   assert.equal(TokenTracker.computeTierLevel(0.50), 'normal');
   assert.equal(TokenTracker.computeTierLevel(0.51), 'warn');
   assert.equal(TokenTracker.computeTierLevel(0.80), 'warn');
   assert.equal(TokenTracker.computeTierLevel(0.81), 'crit');
-  assert.equal(TokenTracker.computeRemainingLevel(50), 'normal');
-  assert.equal(TokenTracker.computeRemainingLevel(49), 'warn');
-  assert.equal(TokenTracker.computeRemainingLevel(20), 'warn');
-  assert.equal(TokenTracker.computeRemainingLevel(19), 'crit');
+  assert.equal(TokenTracker.formatSyncAge(15000), 'just now');
+  assert.equal(TokenTracker.formatSyncAge(12 * 60000), '12m ago');
+  assert.equal(TokenTracker.formatSyncAge(3 * 3600000), '3h ago');
 
   assert.equal(TokenTracker.detectLimitBannerText('Normal chat text about limits'), null);
   assert.deepEqual(TokenTracker.detectLimitBannerText('You reached your daily quota limit. Try again in 2 hrs.'), { scope: 'daily', resetHint: '2 hrs' });
   assert.deepEqual(TokenTracker.detectLimitBannerText('Weekly limit reached until 09:30 AM'), { scope: 'weekly', resetHint: '09:30 AM' });
 
   const now = 1_700_000_000_000;
-  const idleSnap = TokenTracker.computeQuotaSnapshot(null, { plan: 'pro', inputTokens: 4100, outputTokens: 8100, draftTokens: 200, hasMedia: true, now });
-  assert.equal(idleSnap.ctxText, '~12.4k / 1M (1.2%)');
-  assert.equal(idleSnap.dailyText, 'Day 100% left');
-  assert.equal(idleSnap.weeklyText, 'Week 100% left');
-  assert.equal(idleSnap.planBadgeText, 'AI Pro \u00b7 1M');
-  assert.equal(idleSnap.footerText, 'Estimated locally for AI Pro (this browser)');
+  const unsynced = TokenTracker.computeQuotaSnapshot(null, { plan: 'pro', inputTokens: 4100, outputTokens: 8100, draftTokens: 200, hasMedia: true, now });
+  assert.equal(unsynced.ctxText, '~12.4k / 1M (1.2%)');
+  assert.equal(unsynced.window5hText, '5h ...');
+  assert.equal(unsynced.weeklyText, 'Week ...');
+  assert.equal(unsynced.tip5h, 'Syncing from /usage...');
+  assert.equal(unsynced.planBadgeText, 'AI Pro \u00b7 1M');
+  assert.equal(unsynced.footerText, 'Syncing official usage from gemini.google.com/usage...');
 
-  const hitSnap = TokenTracker.computeQuotaSnapshot({ dailyUsed: 1000, dailyStart: now - 1000, weeklyUsed: 1000, weeklyStart: now - 1000 }, {
+  const syncedStore = {
+    detectedPlan: 'pro',
+    planConfidence: 'high',
+    syncedAt: now - 120000,
+    window5hPct: 55,
+    window5hResetAt: now + (3 * 60 + 8) * 60000,
+    weeklyPct: 84,
+    weeklyResetAt: now + (4 * 24 + 13) * 3600000
+  };
+  const synced = TokenTracker.computeQuotaSnapshot(syncedStore, { plan: 'pro', inputTokens: 1000, outputTokens: 2000, draftTokens: 0, now });
+  assert.equal(synced.window5hText, '5h 55% (3h 8m)');
+  assert.equal(synced.window5hLevel, 'warn');
+  assert.equal(synced.weeklyText, 'Week 84% (4d 13h)');
+  assert.equal(synced.weeklyLevel, 'crit');
+  assert.ok(synced.tip5h.startsWith('55% used \u00b7 resets in 3h 8m'));
+  assert.equal(synced.footerText, 'Synced from gemini.google.com/usage \u00b7 2m ago');
+
+  // Local reset expiry flips expired window to 0% without network.
+  const expired = TokenTracker.computeQuotaSnapshot(syncedStore, { plan: 'pro', inputTokens: 1000, outputTokens: 0, draftTokens: 0, now: syncedStore.window5hResetAt });
+  assert.equal(expired.window5hText, '5h 0%');
+  assert.equal(expired.window5hLevel, 'normal');
+  assert.equal(expired.weeklyPct, 84);
+
+  const hitSnap = TokenTracker.computeQuotaSnapshot(syncedStore, {
     plan: 'free', inputTokens: 1000, outputTokens: 0, draftTokens: 0,
     limitBanner: { scope: 'daily', resetHint: '1h' }, now
   });
-  assert.equal(hitSnap.dailyLeftPct, 0);
-  assert.equal(hitSnap.dailyLevel, 'crit');
+  assert.equal(hitSnap.window5hPct, 100);
+  assert.equal(hitSnap.window5hLevel, 'crit');
 
   assert.equal(typeof Selectors.findComposerInput, 'function');
   assert.equal(typeof Selectors.findDisclaimer, 'function');
@@ -891,11 +958,10 @@ check('token-tracker: snapshot thresholds, limit banner, selectors & CSS/main co
   assert.ok(Array.isArray(Selectors.SEL.planBadge));
 
   // findDisclaimer finds sibling disclaimer outside input-area-v2 while skipping chat-history prose
-  const stamped = [];
   const mkDiscNode = (text, opts = {}) => ({
     textContent: text,
     attrs: {},
-    setAttribute(k, v) { this.attrs[k] = v; stamped.push(this); },
+    setAttribute(k, v) { this.attrs[k] = v; },
     closest: (s) => (opts.inChat && s.includes('.chat-history') ? {} : null),
     querySelector: () => null
   });
@@ -928,8 +994,103 @@ check('token-tracker: snapshot thresholds, limit banner, selectors & CSS/main co
   assert.ok(main.includes('TokenTracker.startSmoothTrack('));
 });
 
-check('token-tracker: end-to-end mount + update against real Selectors renders visible bottom bar', () => {
+await checkAsync('usage-sync: controller single-flight, throttle, manual-tab protection, loop guard & SW removal', async () => {
+  let fakeNow = 100000;
+  let nextTabId = 42;
+  const createdTabs = [];
+  const removedTabs = [];
+  const memLocal = {};
+  const memSession = {};
+  const timers = new Map();
+  let nextTimerId = 1;
+
+  const ctrl = UsageSync.createSyncController({
+    tabs: {
+      create: async (opts) => { const t = { id: nextTabId++, url: opts.url, active: opts.active }; createdTabs.push(t); return t; },
+      remove: async (id) => { removedTabs.push(id); }
+    },
+    storage: {
+      local: {
+        get: async (k) => ({ [k]: memLocal[k] }),
+        set: async (obj) => { Object.assign(memLocal, obj); }
+      },
+      session: {
+        get: async (k) => ({ [k]: memSession[k] }),
+        set: async (obj) => { Object.assign(memSession, obj); },
+        remove: async (k) => { delete memSession[k]; }
+      }
+    },
+    setTimeout: (fn) => { const id = nextTimerId++; timers.set(id, fn); return id; },
+    clearTimeout: (id) => { timers.delete(id); },
+    now: () => fakeNow
+  });
+
+  // Infinite-loop guard ignores TRIGGER_USAGE_SYNC from /usage tab
+  let ignoredReply = null;
+  ctrl.handleMessage({ type: 'TRIGGER_USAGE_SYNC', reason: 'chat' }, { tab: { id: 9, url: 'https://gemini.google.com/usage' } }, (r) => { ignoredReply = r; });
+  assert.deepEqual(ignoredReply, { ok: false, ignored: true });
+  assert.equal(createdTabs.length, 0);
+
+  // Trigger sync -> single-flight blocks 2nd concurrent trigger
+  const r1 = await ctrl.triggerUsageSync('initial');
+  assert.deepEqual(r1, { started: true, tabId: 42 });
+  assert.equal(ctrl.getState().inFlightTabId, 42);
+  const r2 = await ctrl.triggerUsageSync('chat');
+  assert.deepEqual(r2, { started: false, reason: 'IN_FLIGHT' });
+
+  // Result from user's manual /usage tab (tab 99, isAutoSync: false) must NEVER close tab 99
+  await new Promise((resolve) => {
+    ctrl.handleMessage({
+      type: 'USAGE_SYNC_RESULT',
+      isAutoSync: false,
+      data: { detectedPlan: 'pro', syncedAt: fakeNow, window5hPct: 12, window5hResetAt: fakeNow + 1000, weeklyPct: 7, weeklyResetAt: fakeNow + 5000 }
+    }, { tab: { id: 99, url: 'https://gemini.google.com/usage' } }, (res) => {
+      assert.equal(res.closed, false);
+      resolve();
+    });
+  });
+  assert.ok(!removedTabs.includes(99), 'must never close user manual /usage tab');
+  assert.equal(memLocal[UsageSync.STORAGE_KEY].window5hPct, 12);
+
+  // Result from our in-flight tab (tab 42, isAutoSync: true) MUST auto-close tab 42 and clear lock
+  await new Promise((resolve) => {
+    ctrl.handleMessage({
+      type: 'USAGE_SYNC_RESULT',
+      isAutoSync: true,
+      data: { detectedPlan: null, syncedAt: fakeNow + 50, window5hPct: 15, window5hResetAt: fakeNow + 2000, weeklyPct: 8, weeklyResetAt: fakeNow + 6000 }
+    }, { tab: { id: 42, url: 'https://gemini.google.com/usage#gopt-sync' } }, (res) => {
+      assert.equal(res.closed, true);
+      resolve();
+    });
+  });
+  assert.ok(removedTabs.includes(42), 'auto-sync tab must close');
+  assert.equal(ctrl.getState().inFlightTabId, null);
+  assert.equal(memLocal[UsageSync.STORAGE_KEY].detectedPlan, 'pro', 'null plan preserves existing plan');
+
+  // Throttle blocks immediate chat trigger (< 4000ms), but 'install' bypasses
+  fakeNow += 1000;
+  const rThrot = await ctrl.triggerUsageSync('response');
+  assert.deepEqual(rThrot, { started: false, reason: 'THROTTLED' });
+  const rInstall = await ctrl.triggerUsageSync('install');
+  assert.deepEqual(rInstall, { started: true, tabId: 43 });
+
+  // Timeout closes tab 43 & onTabRemoved releases lock cleanly
+  const rTo = timers.get([...timers.keys()][0]);
+  if (rTo) await rTo();
+  assert.ok(removedTabs.includes(43));
+  assert.equal(ctrl.getState().inFlightTabId, null);
+
+  fakeNow += 5000;
+  const r3 = await ctrl.triggerUsageSync('response');
+  assert.equal(r3.tabId, 44);
+  ctrl.onTabRemoved(44);
+  assert.equal(ctrl.getState().inFlightTabId, null);
+});
+
+check('token-tracker: end-to-end mount + update + chrome.storage.onChanged live /usage sync', () => {
   const prevSel = globalThis.GeminiOptSelectors;
+  const prevChrome = globalThis.chrome;
+  const prevLoc = globalThis.location;
   const prevRaf = globalThis.requestAnimationFrame;
   const prevCancelRaf = globalThis.cancelAnimationFrame;
   const prevW = globalThis.innerWidth;
@@ -1011,8 +1172,28 @@ check('token-tracker: end-to-end mount + update against real Selectors renders v
     }
   };
 
+  let storageChangedCb = null;
+  const sentMessages = [];
+  const storeMem = {};
+
   try {
     globalThis.GeminiOptSelectors = Selectors;
+    globalThis.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage: (m, cb) => { sentMessages.push(m); if (cb) cb(); }
+      },
+      storage: {
+        local: {
+          get: (k, cb) => cb({ [k]: storeMem[k] }),
+          set: (obj, cb) => { Object.assign(storeMem, obj); if (cb) cb(); }
+        },
+        onChanged: {
+          addListener: (fn) => { storageChangedCb = fn; },
+          removeListener: () => { storageChangedCb = null; }
+        }
+      }
+    };
     globalThis.requestAnimationFrame = (fn) => { fn(); return 1; };
     globalThis.cancelAnimationFrame = () => {};
     globalThis.innerWidth = 1280;
@@ -1030,6 +1211,7 @@ check('token-tracker: end-to-end mount + update against real Selectors renders v
       doc: mockDoc
     });
 
+    assert.ok(sentMessages.some((m) => m.type === 'TRIGGER_USAGE_SYNC' && m.reason === 'initial'), 'triggers initial sync when syncedAt === 0');
     const bar = bodyChildren.find((n) => n.className === 'gopt-token-bar');
     assert.ok(bar, 'bar mounted in document.body');
     assert.ok(bar.classList.contains('is-visible'), 'bar must become visible');
@@ -1039,12 +1221,115 @@ check('token-tracker: end-to-end mount + update against real Selectors renders v
     assert.equal(bar.style.width, '731px');
     assert.equal(bar.style.bottom, '8px');
     assert.equal(bar.style.top, '');
+
     const ctxSpan = bar.children.find((c) => c.className === 'gopt-tk-ctx');
+    const span5h = bar.children.find((c) => c.className === 'gopt-tk-day');
+    const spanWeek = bar.children.find((c) => c.className === 'gopt-tk-week');
     assert.ok(ctxSpan && ctxSpan.textContent.includes('/ 1M'), 'auto-detected AI Pro 1M cap: ' + (ctxSpan && ctxSpan.textContent));
+    assert.equal(span5h.textContent, '5h ...');
+    assert.equal(spanWeek.textContent, 'Week ...');
     assert.equal(bar.children[bar.children.length - 1].className, 'gopt-tk-meter', 'meter sits on right edge after left-aligned text');
+
+    // Simulate background /usage sync arriving via chrome.storage.onChanged
+    const now = Date.now();
+    storageChangedCb({
+      [TokenTracker.STORAGE_KEY]: {
+        newValue: {
+          detectedPlan: 'pro',
+          planConfidence: 'high',
+          syncedAt: now,
+          window5hPct: 12,
+          window5hResetAt: now + 3 * 3600000 + 8 * 60000,
+          weeklyPct: 7,
+          weeklyResetAt: now + (4 * 24 + 13) * 3600000
+        }
+      }
+    }, 'local');
+    assert.ok(span5h.textContent.startsWith('5h 12%'), 'synced 5h bar text: ' + span5h.textContent);
+    assert.ok(spanWeek.textContent.startsWith('Week 7%'), 'synced weekly bar text: ' + spanWeek.textContent);
+
+    // Regression: fast 1-answer reply (even without wasStreaming: true) and 1-word answer after prompt must trigger 'response' sync;
+    // prepending older turns at top & storageListener updates must NOT trigger spurious syncs.
+    const prevSetTo = globalThis.setTimeout;
+    const prevClrTo = globalThis.clearTimeout;
+    const fakeTimers = new Map();
+    let tid = 1;
+    globalThis.setTimeout = (fn, ms) => { const id = tid++; fakeTimers.set(id, { fn, ms }); return id; };
+    globalThis.clearTimeout = (id) => { fakeTimers.delete(id); };
+    try {
+      sentMessages.length = 0;
+      const olderTurn = {
+        querySelector: (s) => (s === 'user-query' ? { textContent: 'Old q' } : s === 'model-response' ? { textContent: 'Old answer text here' } : null)
+      };
+      // Prepending older history at top keeps lastTurnEl unchanged -> 0 syncs
+      TokenTracker.update({ turns: [olderTurn, turnEl], streaming: false, wasStreaming: false, url: 'https://gemini.google.com/app/test123', doc: mockDoc });
+      for (const [, t] of fakeTimers) t.fn();
+      fakeTimers.clear();
+      assert.equal(sentMessages.filter((m) => m.reason === 'response').length, 0, 'prepending older turns must not trigger sync');
+
+      // New prompt mounted first with empty model-response, then 1-word answer arrives without wasStreaming: true -> triggers sync!
+      let replyText = '';
+      const newTurn = {
+        querySelector: (s) => (s === 'user-query' ? { textContent: 'Tes 1' } : s === 'model-response' ? { textContent: replyText } : null)
+      };
+      TokenTracker.update({ turns: [olderTurn, turnEl, newTurn], streaming: false, wasStreaming: false, url: 'https://gemini.google.com/app/test123', doc: mockDoc });
+      for (const [, t] of fakeTimers) t.fn();
+      fakeTimers.clear();
+      assert.equal(sentMessages.filter((m) => m.reason === 'response').length, 0, 'empty model-response waits for answer');
+
+      replyText = 'Ya';
+      TokenTracker.update({ turns: [olderTurn, turnEl, newTurn], streaming: false, wasStreaming: false, url: 'https://gemini.google.com/app/test123', doc: mockDoc });
+      assert.ok(fakeTimers.size >= 1, 'schedules post-answer settle sync after 1-word reply');
+      for (const [, t] of fakeTimers) t.fn();
+      fakeTimers.clear();
+      assert.equal(sentMessages.filter((m) => m.reason === 'response').length, 1, 'triggers exactly 1 response sync after Gemini answers');
+
+      // Storage update arriving afterwards must NOT replay wasStreaming or trigger another response sync
+      sentMessages.length = 0;
+      storageChangedCb({
+        [TokenTracker.STORAGE_KEY]: {
+          newValue: { detectedPlan: 'pro', planConfidence: 'high', syncedAt: now + 5000, window5hPct: 14, window5hResetAt: now + 3 * 3600000, weeklyPct: 8, weeklyResetAt: now + 4 * 24 * 3600000 }
+        }
+      }, 'local');
+      for (const [, t] of fakeTimers) t.fn();
+      fakeTimers.clear();
+      assert.equal(sentMessages.filter((m) => m.reason === 'response').length, 0, 'storage update must not re-trigger response sync');
+      assert.ok(span5h.textContent.startsWith('5h 14%'), 'bar updates to new synced 14%: ' + span5h.textContent);
+    } finally {
+      globalThis.setTimeout = prevSetTo;
+      globalThis.clearTimeout = prevClrTo;
+    }
+
+    const mainSrc = read('src', 'content', 'main.js');
+    assert.ok(mainSrc.includes('STREAM_WATCH_MS') && mainSrc.includes('streamWatchTimer'), 'main.js polls while streaming so external stopButton removal is caught');
+    TokenTracker.destroy();
+
+    // Verify /usage scraper mode captures #gopt-sync immediately, skips bar UI, and posts USAGE_SYNC_RESULT
+    sentMessages.length = 0;
+    bodyChildren.length = 0;
+    globalThis.location = { pathname: '/usage', hash: '#gopt-sync', href: 'https://gemini.google.com/usage#gopt-sync' };
+    const usageContainer = {
+      childNodes: [],
+      textContent: 'Batas penggunaan\nPRO\nPenggunaan saat ini\n12% digunakan\nDireset pukul 15.42\nBatas mingguan\nDireset pada 24 Nov pukul 13.42\n7% digunakan\nDapatkan penggunaan 5x lebih banyak dengan AI Ultra\nUpgrade'
+    };
+    const usageDoc = {
+      documentElement: { classList: mkClassList() },
+      body: { appendChild: (el) => { bodyChildren.push(el); return el; } },
+      querySelector: (s) => (s === 'bard-sidenav-content' ? usageContainer : null)
+    };
+    TokenTracker.mount(usageDoc);
+    assert.equal(bodyChildren.length, 0, '/usage scraper must not mount token bar');
+    const syncMsg = sentMessages.find((m) => m.type === 'USAGE_SYNC_RESULT');
+    assert.ok(syncMsg && syncMsg.isAutoSync === true && syncMsg.data.detectedPlan === 'pro');
+    assert.equal(syncMsg.data.window5hPct, 12);
+    assert.equal(syncMsg.data.weeklyPct, 7);
+    assert.equal(storeMem[TokenTracker.STORAGE_KEY].window5hPct, 12);
     TokenTracker.destroy();
   } finally {
     globalThis.GeminiOptSelectors = prevSel;
+    globalThis.chrome = prevChrome;
+    if (prevLoc !== undefined) globalThis.location = prevLoc;
+    else delete globalThis.location;
     globalThis.requestAnimationFrame = prevRaf;
     globalThis.cancelAnimationFrame = prevCancelRaf;
     globalThis.innerWidth = prevW;
@@ -1054,10 +1339,549 @@ check('token-tracker: end-to-end mount + update against real Selectors renders v
   }
 });
 
+// ---------- Reset-Time Engine, Provisional Anchor & 60fps LaTeX Optimizations ----------
+check('token-tracker: candidate reset solver covers 12h/24h ambiguity, midnight rollover & exact minute match', () => {
+  // 12.30 at 21:00 (no AM/PM) -> tomorrow 00:30 (+3h30m inside 5h15m window)
+  const ninePm = new Date(2026, 10, 20, 21, 0, 0, 0).getTime();
+  const r1230 = new Date(TokenTracker.parseResetTimestamp('Direset pukul 12.30', ninePm, '5h'));
+  assert.equal(r1230.getDate(), 21);
+  assert.equal(r1230.getHours(), 0);
+  assert.equal(r1230.getMinutes(), 30);
+
+  // Explicit 12:30 PM at 10:00 -> today 12:30 vs explicit 12:30 AM at 21:00 -> tomorrow 00:30
+  const tenAm = new Date(2026, 10, 20, 10, 0, 0, 0).getTime();
+  const r1230pm = new Date(TokenTracker.parseResetTimestamp('Resets at 12:30 PM', tenAm, '5h'));
+  assert.equal(r1230pm.getDate(), 20);
+  assert.equal(r1230pm.getHours(), 12);
+  const r1230am = new Date(TokenTracker.parseResetTimestamp('Resets at 12:30 AM', ninePm, '5h'));
+  assert.equal(r1230am.getDate(), 21);
+  assert.equal(r1230am.getHours(), 0);
+
+  // 00:05 at 23:59 rollover -> tomorrow 00:05 (+6m)
+  const lateNight = new Date(2026, 10, 20, 23, 59, 0, 0).getTime();
+  const r0005 = new Date(TokenTracker.parseResetTimestamp('Direset pukul 00.05', lateNight, '5h'));
+  assert.equal(r0005.getDate(), 21);
+  assert.equal(r0005.getHours(), 0);
+  assert.equal(r0005.getMinutes(), 5);
+
+  // Exact clock-minute match in (ts - 2m, ts] stays clamped at >= ts instead of jumping +24h
+  const exactNow = new Date(2026, 10, 20, 15, 42, 30, 0).getTime();
+  const rExact = TokenTracker.parseResetTimestamp('Direset pukul 15.42', exactNow, '5h');
+  assert.equal(rExact, exactNow);
+});
+
+await checkAsync('provisional reset anchor, snapshot formatting & usage-sync snap/preserve/manual bypass', async () => {
+  assert.equal(TokenTracker.WINDOW_5H_MS, 5 * 3600 * 1000);
+  assert.equal(TokenTracker.WINDOW_WEEK_MS, 7 * 24 * 3600 * 1000);
+
+  const t0 = 1_700_000_000_000;
+  const prov = TokenTracker.applyProvisionalReset(null, t0);
+  assert.equal(prov.window5hPct, 0);
+  assert.equal(prov.window5hResetAt, t0 + TokenTracker.WINDOW_5H_MS);
+  assert.equal(prov.window5hResetProvisional, true);
+  assert.equal(prov.weeklyPct, 0);
+  assert.equal(prov.weeklyResetAt, t0 + TokenTracker.WINDOW_WEEK_MS);
+  assert.equal(prov.weeklyResetProvisional, true);
+
+  const snap = TokenTracker.computeQuotaSnapshot(prov, { plan: 'pro', inputTokens: 100, outputTokens: 200, now: t0 });
+  assert.equal(snap.window5hText, '5h 0% (~5h 0m)');
+  assert.equal(snap.weeklyText, 'Week 0% (~7d 0h)');
+  assert.equal(snap.window5hResetProvisional, true);
+  assert.equal(snap.weeklyResetProvisional, true);
+  assert.ok(snap.tip5h.includes('~5h 0m') && snap.tip5h.includes('(provisional)'));
+  assert.ok(snap.tipWeekly.includes('~7d 0h') && snap.tipWeekly.includes('(provisional)'));
+
+  // Preserves active/provisional reset when scraped ResetAt === 0; snaps official ResetAt > 0
+  let fakeNow = t0;
+  let nextTabId = 90;
+  const memLocal = {
+    [UsageSync.STORAGE_KEY]: {
+      detectedPlan: 'pro',
+      planConfidence: 'high',
+      syncedAt: 0,
+      window5hPct: 0,
+      window5hResetAt: t0 + TokenTracker.WINDOW_5H_MS,
+      window5hResetProvisional: true,
+      weeklyPct: 5,
+      weeklyResetAt: t0 + TokenTracker.WINDOW_WEEK_MS,
+      weeklyResetProvisional: false
+    }
+  };
+  const ctrl = UsageSync.createSyncController({
+    tabs: { create: async (opts) => ({ id: nextTabId++, url: opts.url }), remove: async () => {} },
+    storage: {
+      local: { get: async (k) => ({ [k]: memLocal[k] }), set: async (o) => Object.assign(memLocal, o) },
+      session: { get: async () => ({}), set: async () => {}, remove: async () => {} }
+    },
+    setTimeout: () => 1,
+    clearTimeout: () => {},
+    now: () => fakeNow
+  });
+
+  await ctrl.saveSyncedUsage({
+    detectedPlan: 'pro', syncedAt: fakeNow + 1000,
+    window5hPct: 0, window5hResetAt: 0, weeklyPct: 5, weeklyResetAt: 0
+  });
+  assert.equal(memLocal[UsageSync.STORAGE_KEY].window5hResetAt, t0 + TokenTracker.WINDOW_5H_MS, 'preserves unexpired provisional 5h reset');
+  assert.equal(memLocal[UsageSync.STORAGE_KEY].window5hResetProvisional, true);
+  assert.equal(memLocal[UsageSync.STORAGE_KEY].weeklyResetAt, t0 + TokenTracker.WINDOW_WEEK_MS, 'preserves active >0% weekly reset');
+  assert.equal(memLocal[UsageSync.STORAGE_KEY].weeklyResetProvisional, false);
+
+  await ctrl.saveSyncedUsage({
+    detectedPlan: 'pro', syncedAt: fakeNow + 2000,
+    window5hPct: 3, window5hResetAt: fakeNow + 4 * 3600000, weeklyPct: 6, weeklyResetAt: fakeNow + 6 * 86400000
+  });
+  assert.equal(memLocal[UsageSync.STORAGE_KEY].window5hResetAt, fakeNow + 4 * 3600000);
+  assert.equal(memLocal[UsageSync.STORAGE_KEY].window5hResetProvisional, false, 'official ResetAt clears provisional flag');
+
+  // 'manual' bypasses MIN_SYNC_INTERVAL_MS throttle
+  const rFirst = await ctrl.triggerUsageSync('response');
+  assert.equal(rFirst.started, true);
+  ctrl.onTabRemoved(rFirst.tabId);
+  fakeNow += 500;
+  assert.deepEqual(await ctrl.triggerUsageSync('response'), { started: false, reason: 'THROTTLED' });
+  const rManual = await ctrl.triggerUsageSync('manual');
+  assert.equal(rManual.started, true, 'manual sync bypasses throttle');
+});
+
+check('token-tracker: manual click/Enter sync, scroll-idle sync deferral, MathML dedup & settled-turn cache', () => {
+  const prevSel = globalThis.GeminiOptSelectors;
+  const prevChrome = globalThis.chrome;
+  const prevRaf = globalThis.requestAnimationFrame;
+  const prevCancelRaf = globalThis.cancelAnimationFrame;
+  const prevSetTo = globalThis.setTimeout;
+  const prevClrTo = globalThis.clearTimeout;
+  const prevW = globalThis.innerWidth;
+  const prevH = globalThis.innerHeight;
+  const prevAdd = globalThis.addEventListener;
+  const prevRem = globalThis.removeEventListener;
+
+  const mkClassList = () => {
+    const set = new Set();
+    return {
+      add: (...c) => c.forEach((x) => set.add(x)),
+      remove: (...c) => c.forEach((x) => set.delete(x)),
+      contains: (c) => set.has(c),
+      toggle: (c, on) => {
+        const next = on === undefined ? !set.has(c) : !!on;
+        if (next) set.add(c); else set.delete(c);
+        return next;
+      }
+    };
+  };
+  let selectionStr = '';
+  const mkEl = (tag) => {
+    const attrs = {};
+    const listeners = {};
+    const children = [];
+    return {
+      tagName: tag.toUpperCase(), id: '', className: '', classList: mkClassList(),
+      style: {}, textContent: '', hidden: false, children, attrs, listeners,
+      appendChild(c) { children.push(c); return c; },
+      setAttribute(k, v) { attrs[k] = String(v); },
+      getAttribute: (k) => (k in attrs ? attrs[k] : null),
+      addEventListener(ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); },
+      removeEventListener() {},
+      remove() {},
+      getBoundingClientRect: () => ({ left: 200, top: 770, width: 700, height: 22, bottom: 792 })
+    };
+  };
+  const bodyChildren = [];
+  const sentMessages = [];
+  const fakeTimers = new Map();
+  let nextTid = 1;
+  let storageChangedCb = null;
+  let scrolling = false;
+  let idleSubscriber = null;
+  const storeMem = {};
+
+  const mockDoc = {
+    defaultView: { getSelection: () => selectionStr },
+    documentElement: { classList: mkClassList() },
+    body: { appendChild: (el) => { bodyChildren.push(el); return el; } },
+    createElement: (tag) => mkEl(tag),
+    querySelector: () => null,
+    querySelectorAll: () => []
+  };
+
+  try {
+    globalThis.GeminiOptSelectors = Selectors;
+    globalThis.chrome = {
+      runtime: { lastError: null, sendMessage: (m, cb) => { sentMessages.push(m); if (cb) cb(); } },
+      storage: {
+        local: { get: (k, cb) => cb({ [k]: storeMem[k] }), set: (o, cb) => { Object.assign(storeMem, o); if (cb) cb(); } },
+        onChanged: { addListener: (fn) => { storageChangedCb = fn; }, removeListener: () => { storageChangedCb = null; } }
+      }
+    };
+    globalThis.requestAnimationFrame = (fn) => { fn(); return 1; };
+    globalThis.cancelAnimationFrame = () => {};
+    globalThis.setTimeout = (fn, ms) => { const id = nextTid++; fakeTimers.set(id, { fn, ms }); return id; };
+    globalThis.clearTimeout = (id) => { fakeTimers.delete(id); };
+    globalThis.innerWidth = 1280;
+    globalThis.innerHeight = 800;
+    globalThis.addEventListener = () => {};
+    globalThis.removeEventListener = () => {};
+
+    let uReads = 0;
+    let mReads = 0;
+    const prose = 'Explanation about integral calculus and convergence. ';
+    const mathml = '\\int_0^1 x^2 dx = 1/3';
+    const rawTotal = prose + mathml.repeat(12) + ' '.repeat(12) + mathml.repeat(12);
+    const katexNodes = Array.from({ length: 12 }, () => ({ textContent: mathml }));
+    const uqObj = { get textContent() { uReads++; return 'Integrate x^2'; } };
+    const mrObj = {
+      childElementCount: 4,
+      querySelectorAll: (s) => (s === '.katex-mathml' ? katexNodes : []),
+      get textContent() { mReads++; return rawTotal; }
+    };
+    const mathTurn = {
+      querySelector: (s) => (s === 'user-query' ? uqObj : s === 'model-response' ? mrObj : null)
+    };
+
+    let latestReply = 'Here is an initial summary.';
+    const latestTurn = {
+      querySelector: (s) => (s === 'user-query' ? { textContent: 'q-latest' } : s === 'model-response' ? {
+        childElementCount: 1,
+        get textContent() { return latestReply; }
+      } : null)
+    };
+
+    TokenTracker.setEnabled(true);
+    TokenTracker.setScrollStateProvider(() => scrolling, (cb) => { idleSubscriber = cb; return () => { idleSubscriber = null; }; });
+    TokenTracker.mount(mockDoc);
+    TokenTracker.update({ turns: [mathTurn, latestTurn], streaming: false, wasStreaming: false, url: 'https://gemini.google.com/app/m1', doc: mockDoc });
+    assert.equal(uReads, 1);
+    assert.equal(mReads, 1);
+
+    // .katex-mathml deduplication cuts output estimate well below raw text estimate
+    const tip = bodyChildren.find((n) => n.id === 'gopt-token-tooltip');
+    const outRowBefore = tip.children[1].children[1].children[1].textContent;
+    const parsedOutBefore = parseInt(outRowBefore.replace(/\D/g, ''), 10);
+    assert.ok(parsedOutBefore < TokenTracker.estimateTokens(rawTotal + latestReply), 'deduplicated output ' + parsedOutBefore + ' < raw ' + TokenTracker.estimateTokens(rawTotal + latestReply));
+
+    // Historical mathTurn hits settled cache (0 extra reads), while in-place edit on latestTurn updates tokens without childElementCount change
+    latestReply = 'Here is an initial summary. Plus extra explanation!';
+    TokenTracker.update({ turns: [mathTurn, latestTurn], streaming: false, wasStreaming: false, url: 'https://gemini.google.com/app/m1', doc: mockDoc });
+    assert.equal(uReads, 1, 'historical settled turn skips userQuery textContent read');
+    assert.equal(mReads, 1, 'historical settled turn skips modelResponse textContent read');
+    const outRowAfter = tip.children[1].children[1].children[1].textContent;
+    const parsedOutAfter = parseInt(outRowAfter.replace(/\D/g, ''), 10);
+    assert.ok(parsedOutAfter > parsedOutBefore, 'in-place lastTurn edit updates output (' + parsedOutBefore + ' -> ' + parsedOutAfter + ')');
+
+    // Verify role="button", click with selection ignored, click & Enter trigger manual sync + is-syncing UI
+    const bar = bodyChildren.find((n) => n.className === 'gopt-token-bar');
+    assert.equal(bar.attrs.role, 'button');
+    assert.ok(bar.attrs['aria-label'].includes('sync'));
+
+    // Initial answer completion in unsynced store anchors provisional 5h/weekly countdown (~5h 0m)
+    const span5h = bar.children.find((c) => c.className === 'gopt-tk-day');
+    assert.equal(span5h.textContent, '5h ...');
+    const firstReplyTurn = {
+      querySelector: (s) => (s === 'user-query' ? { textContent: 'q1' } : s === 'model-response' ? { textContent: 'first completed reply' } : null)
+    };
+    TokenTracker.update({ turns: [mathTurn, firstReplyTurn], streaming: false, wasStreaming: true, url: 'https://gemini.google.com/app/m1', doc: mockDoc });
+    assert.ok(span5h.textContent.startsWith('5h 0% (~'), 'response completion anchors provisional 5h countdown: ' + span5h.textContent);
+    fakeTimers.clear();
+
+    sentMessages.length = 0;
+    selectionStr = 'selected prose';
+    bar.listeners.click[0]();
+    assert.equal(sentMessages.length, 0, 'non-empty selection suppresses click sync');
+
+    selectionStr = '';
+    bar.listeners.click[0]();
+    assert.equal(sentMessages.filter((m) => m.reason === 'manual').length, 1);
+    assert.ok(bar.classList.contains('is-syncing'));
+    assert.equal(tip.children[4].textContent, 'Syncing official usage...');
+
+    // 16s manual sync safety timeout clears .is-syncing if no storage update arrives
+    const cap16s = Array.from(fakeTimers.entries()).find(([, v]) => v.ms === 16000);
+    assert.ok(cap16s, 'schedules 16s manual-sync safety timer');
+    fakeTimers.delete(cap16s[0]);
+    cap16s[1].fn();
+    assert.ok(!bar.classList.contains('is-syncing'), '16s safety timer clears is-syncing');
+
+    // Re-trigger via Space keydown and clear via chrome.storage.onChanged
+    let spacePrevented = false;
+    bar.listeners.keydown[0]({ key: ' ', preventDefault: () => { spacePrevented = true; } });
+    assert.ok(spacePrevented && bar.classList.contains('is-syncing'));
+    storageChangedCb({
+      [TokenTracker.STORAGE_KEY]: {
+        newValue: { detectedPlan: 'pro', planConfidence: 'high', syncedAt: Date.now(), window5hPct: 5, window5hResetAt: Date.now() + 3600000, weeklyPct: 1, weeklyResetAt: Date.now() + 86400000 }
+      }
+    }, 'local');
+    assert.ok(!bar.classList.contains('is-syncing'), 'storage update clears is-syncing');
+
+    let prevented = false;
+    bar.listeners.keydown[0]({ key: 'Enter', preventDefault: () => { prevented = true; } });
+    assert.ok(prevented && sentMessages.filter((m) => m.reason === 'manual').length === 3);
+
+    // Scroll-aware post-answer sync: waits if scrolling when settle timer fires, then waits +500ms after idle
+    sentMessages.length = 0;
+    fakeTimers.clear();
+    const newTurn = {
+      querySelector: (s) => (s === 'user-query' ? { textContent: 'q2' } : s === 'model-response' ? { textContent: 'answer 2' } : null)
+    };
+    TokenTracker.update({ turns: [mathTurn, newTurn], streaming: false, wasStreaming: true, url: 'https://gemini.google.com/app/m1', doc: mockDoc });
+    const settleEntry = Array.from(fakeTimers.entries()).find(([, v]) => v.ms === 1800);
+    assert.ok(settleEntry, 'schedules 1800ms settle timer');
+    scrolling = true;
+    fakeTimers.delete(settleEntry[0]);
+    settleEntry[1].fn();
+    assert.equal(sentMessages.filter((m) => m.reason === 'response').length, 0, 'defers sync while user is scrolling');
+    assert.ok(typeof idleSubscriber === 'function', 'subscribes to scroll idle');
+
+    scrolling = false;
+    idleSubscriber();
+    const postIdleEntry = Array.from(fakeTimers.entries()).find(([, v]) => v.ms === 500);
+    assert.ok(postIdleEntry, 'waits 500ms after scroll becomes idle');
+    fakeTimers.delete(postIdleEntry[0]);
+    postIdleEntry[1].fn();
+    assert.equal(sentMessages.filter((m) => m.reason === 'response').length, 1, 'fires response sync after idle grace');
+
+    // Continuous scroll past 6000ms max cap forces sync without starvation
+    sentMessages.length = 0;
+    fakeTimers.clear();
+    const newTurn3 = {
+      querySelector: (s) => (s === 'user-query' ? { textContent: 'q3' } : s === 'model-response' ? { textContent: 'answer 3' } : null)
+    };
+    TokenTracker.update({ turns: [mathTurn, newTurn3], streaming: false, wasStreaming: true, url: 'https://gemini.google.com/app/m1', doc: mockDoc });
+    const settleEntry2 = Array.from(fakeTimers.entries()).find(([, v]) => v.ms === 1800);
+    scrolling = true;
+    fakeTimers.delete(settleEntry2[0]);
+    settleEntry2[1].fn();
+    const cap6s = Array.from(fakeTimers.entries()).find(([, v]) => v.ms === 6000);
+    assert.ok(cap6s, 'schedules 6000ms max defer cap timer');
+    fakeTimers.delete(cap6s[0]);
+    cap6s[1].fn();
+    assert.equal(sentMessages.filter((m) => m.reason === 'response').length, 1, '6000ms max cap flushes response sync during continuous scroll');
+    TokenTracker.destroy();
+  } finally {
+    globalThis.GeminiOptSelectors = prevSel;
+    globalThis.chrome = prevChrome;
+    globalThis.requestAnimationFrame = prevRaf;
+    globalThis.cancelAnimationFrame = prevCancelRaf;
+    globalThis.setTimeout = prevSetTo;
+    globalThis.clearTimeout = prevClrTo;
+    globalThis.innerWidth = prevW;
+    globalThis.innerHeight = prevH;
+    globalThis.addEventListener = prevAdd;
+    globalThis.removeEventListener = prevRem;
+  }
+});
+
+await checkAsync('end-to-end provisional persist -> manual click flush -> 0% /usage finishScrape preserve -> official reset snap', async () => {
+  const prevSel = globalThis.GeminiOptSelectors;
+  const prevChrome = globalThis.chrome;
+  const prevLoc = globalThis.location;
+  const prevRaf = globalThis.requestAnimationFrame;
+  const prevCancelRaf = globalThis.cancelAnimationFrame;
+  const prevSetTo = globalThis.setTimeout;
+  const prevClrTo = globalThis.clearTimeout;
+  const prevDateNow = Date.now;
+  const prevW = globalThis.innerWidth;
+  const prevH = globalThis.innerHeight;
+  const prevAdd = globalThis.addEventListener;
+  const prevRem = globalThis.removeEventListener;
+
+  let fakeNow = new Date(2026, 10, 20, 12, 34, 0, 0).getTime();
+  const mkClassList = () => {
+    const set = new Set();
+    return {
+      add: (...c) => c.forEach((x) => set.add(x)),
+      remove: (...c) => c.forEach((x) => set.delete(x)),
+      contains: (c) => set.has(c),
+      toggle: (c, on) => { const n = on === undefined ? !set.has(c) : !!on; if (n) set.add(c); else set.delete(c); return n; }
+    };
+  };
+  const mkEl = (tag) => {
+    const attrs = {}; const listeners = {}; const children = [];
+    return {
+      tagName: tag.toUpperCase(), id: '', className: '', classList: mkClassList(),
+      style: {}, textContent: '', hidden: false, children, attrs, listeners,
+      appendChild(c) { children.push(c); return c; },
+      setAttribute(k, v) { attrs[k] = String(v); },
+      getAttribute: (k) => (k in attrs ? attrs[k] : null),
+      addEventListener(ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); },
+      removeEventListener() {},
+      remove() {},
+      getBoundingClientRect: () => ({ left: 200, top: 770, width: 700, height: 22, bottom: 792 })
+    };
+  };
+
+  const memLocal = {};
+  let storageChangedCb = null;
+  const bodyChildren = [];
+  const fakeTimers = new Map();
+  let nextTid = 1;
+  let usagePageText = '';
+
+  const ctrl = UsageSync.createSyncController({
+    tabs: { create: async () => ({ id: 77 }), remove: async () => {} },
+    storage: {
+      local: { get: async (k) => ({ [k]: memLocal[k] }), set: async (o) => Object.assign(memLocal, o) },
+      session: { get: async () => ({}), set: async () => {}, remove: async () => {} }
+    },
+    setTimeout: () => 1,
+    clearTimeout: () => {},
+    now: () => fakeNow
+  });
+
+  const mockDoc = {
+    defaultView: { getSelection: () => '' },
+    documentElement: { classList: mkClassList() },
+    body: { appendChild: (el) => { bodyChildren.push(el); return el; } },
+    createElement: (tag) => mkEl(tag),
+    querySelector: (s) => (s === 'bard-sidenav-content' ? { childNodes: [], textContent: usagePageText } : null),
+    querySelectorAll: () => []
+  };
+
+  let sentSyncMsgs = [];
+  try {
+    globalThis.GeminiOptSelectors = Selectors;
+    Date.now = () => fakeNow;
+    globalThis.requestAnimationFrame = (fn) => { fn(); return 1; };
+    globalThis.cancelAnimationFrame = () => {};
+    globalThis.setTimeout = (fn, ms) => { const id = nextTid++; fakeTimers.set(id, { fn, ms }); return id; };
+    globalThis.clearTimeout = (id) => { fakeTimers.delete(id); };
+    globalThis.innerWidth = 1280;
+    globalThis.innerHeight = 800;
+    globalThis.addEventListener = () => {};
+    globalThis.removeEventListener = () => {};
+    globalThis.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage: (m, cb) => {
+          sentSyncMsgs.push(m);
+          if (cb) cb();
+        }
+      },
+      storage: {
+        local: {
+          get: (k, cb) => cb({ [k]: memLocal[k] }),
+          set: (o, cb) => { Object.assign(memLocal, o); if (cb) cb(); }
+        },
+        onChanged: {
+          addListener: (fn) => { storageChangedCb = fn; },
+          removeListener: () => { storageChangedCb = null; }
+        }
+      }
+    };
+
+    // 1. Answer completion on unsynced store anchors provisional reset, and manual click flushes 350ms timer immediately
+    TokenTracker.setEnabled(true);
+    TokenTracker.mount(mockDoc);
+    const doneTurn = {
+      querySelector: (s) => (s === 'user-query' ? { textContent: 'hello' } : s === 'model-response' ? { textContent: 'world' } : null)
+    };
+    TokenTracker.update({ turns: [doneTurn], streaming: false, wasStreaming: true, url: 'https://gemini.google.com/app/c1', doc: mockDoc });
+    assert.equal(memLocal[TokenTracker.STORAGE_KEY], undefined, '350ms persist timer still pending before manual click');
+
+    const bar = bodyChildren.find((n) => n.className === 'gopt-token-bar');
+    bar.listeners.click[0]();
+    assert.ok(sentSyncMsgs.some((m) => m.type === 'TRIGGER_USAGE_SYNC' && m.reason === 'manual'));
+    const storedAfterFlush = memLocal[TokenTracker.STORAGE_KEY];
+    const expectedProv5h = fakeNow + TokenTracker.WINDOW_5H_MS;
+    assert.ok(storedAfterFlush && storedAfterFlush.window5hResetProvisional === true && storedAfterFlush.window5hResetAt === expectedProv5h,
+      'manual click flushes provisional reset before /usage tab opens');
+    TokenTracker.destroy();
+
+    // 2. /usage#gopt-sync scrapes 0% with no reset line -> both finishScrape & saveSyncedUsage preserve unexpired provisional anchor
+    fakeNow += 5000;
+    sentSyncMsgs = [];
+    usagePageText = 'Batas penggunaan\nPRO\nPenggunaan saat ini\n0% digunakan\nBatas mingguan\n0% digunakan';
+    globalThis.location = { pathname: '/usage', hash: '#gopt-sync', href: 'https://gemini.google.com/usage#gopt-sync' };
+    TokenTracker.mount(mockDoc);
+    assert.equal(memLocal[TokenTracker.STORAGE_KEY].window5hResetAt, expectedProv5h, 'finishScrape preserves unexpired provisional 5h reset');
+    assert.equal(memLocal[TokenTracker.STORAGE_KEY].window5hResetProvisional, true);
+    const scrapeMsg1 = sentSyncMsgs.find((m) => m.type === 'USAGE_SYNC_RESULT');
+    assert.ok(scrapeMsg1);
+    await new Promise((resolve) => {
+      ctrl.handleMessage(scrapeMsg1, { tab: { id: 77, url: globalThis.location.href } }, resolve);
+    });
+    assert.equal(memLocal[UsageSync.STORAGE_KEY].window5hResetAt, expectedProv5h, 'saveSyncedUsage preserves provisional 5h reset');
+    assert.equal(memLocal[UsageSync.STORAGE_KEY].window5hResetProvisional, true);
+    TokenTracker.destroy();
+
+    // 3. Subsequent /usage scrape prints official "Direset pukul 15.42" -> snaps cleanly & clears provisional flag
+    fakeNow += 10000;
+    sentSyncMsgs = [];
+    usagePageText = 'Batas penggunaan\nPRO\nPenggunaan saat ini\n12% digunakan\nDireset pukul 15.42\nBatas mingguan\n3% digunakan\nDireset pada 24 Nov pukul 13.42';
+    TokenTracker.mount(mockDoc);
+    const officialExpected = new Date(2026, 10, 20, 15, 42, 0, 0).getTime();
+    assert.equal(memLocal[TokenTracker.STORAGE_KEY].window5hResetAt, officialExpected, 'finishScrape snaps to official 15:42 reset');
+    assert.equal(memLocal[TokenTracker.STORAGE_KEY].window5hResetProvisional, false);
+    const scrapeMsg2 = sentSyncMsgs.find((m) => m.type === 'USAGE_SYNC_RESULT');
+    await new Promise((resolve) => {
+      ctrl.handleMessage(scrapeMsg2, { tab: { id: 77, url: globalThis.location.href } }, resolve);
+    });
+    assert.equal(memLocal[UsageSync.STORAGE_KEY].window5hPct, 12);
+    assert.equal(memLocal[UsageSync.STORAGE_KEY].window5hResetAt, officialExpected);
+    assert.equal(memLocal[UsageSync.STORAGE_KEY].window5hResetProvisional, false);
+    TokenTracker.destroy();
+  } finally {
+    Date.now = prevDateNow;
+    globalThis.GeminiOptSelectors = prevSel;
+    globalThis.chrome = prevChrome;
+    if (prevLoc !== undefined) globalThis.location = prevLoc;
+    else delete globalThis.location;
+    globalThis.requestAnimationFrame = prevRaf;
+    globalThis.cancelAnimationFrame = prevCancelRaf;
+    globalThis.setTimeout = prevSetTo;
+    globalThis.clearTimeout = prevClrTo;
+    globalThis.innerWidth = prevW;
+    globalThis.innerHeight = prevH;
+    globalThis.addEventListener = prevAdd;
+    globalThis.removeEventListener = prevRem;
+  }
+});
+
+check('selectors & 60fps LaTeX CSS/JS contracts: KaTeX skip, virtualization, light-render zero-*, shield & Auto-Guard', () => {
+  for (const s of ['.katex', '.katex-display', '.katex-html', '.katex-mathml', '.math-inline', '.math-block', 'math-inline', 'math-block']) {
+    assert.ok(Selectors.SEL.protected.includes(s), 'missing protected math selector: ' + s);
+  }
+  const katexCand = {
+    tagName: 'SPAN', textContent: 'Sources', childElementCount: 0, attrs: {},
+    getAttribute: () => '', setAttribute(k, v) { this.attrs[k] = v; },
+    closest: (s) => (s.includes('.katex') ? {} : null),
+    querySelector: () => null
+  };
+  const streamingResp = {
+    textContent: 'Using info from Drive',
+    getAttribute: (k) => (k === 'aria-busy' ? 'true' : null),
+    querySelectorAll: () => [mockCandidate({ text: 'Menggunakan info dari Drive' })]
+  };
+  const mrRoot = {
+    querySelectorAll: () => [{ textContent: 'math response', querySelectorAll: () => [katexCand] }]
+  };
+  assert.equal(Selectors.tagDynamicAttributionNodes({ querySelectorAll: (s) => (s === 'model-response' ? mrRoot.querySelectorAll() : []) }), 0);
+  assert.equal(Selectors.tagDynamicAttributionNodes({ querySelectorAll: (s) => (s === 'model-response' ? [streamingResp] : []) }), 0);
+
+  const earlyCss = read('src', 'content', 'early-perf.css');
+  assert.ok(earlyCss.includes('content-visibility: auto') && earlyCss.includes('overflow-clip-margin: 12px'));
+  assert.ok(/html\.gopt-lite-latex\s+\.katex-mathml\s*\{\s*display:\s*none !important/.test(earlyCss));
+  assert.ok(/\[data-gopt-scrolling="1"\]\s*:is\(\.markdown,\s*\.markdown-main-panel\)/.test(earlyCss));
+  assert.ok(/html\.gopt-width-animating:not\(\.gopt-latex-heavy\)/.test(earlyCss));
+
+  const lightSection = overlay.slice(overlay.indexOf('html.gopt-light-render'), overlay.indexOf('/* ---------- text optimization'));
+  assert.ok(!lightSection.includes('*'), 'gopt-light-render must not contain * descendant selectors');
+  assert.ok(overlay.includes('.gopt-token-bar:active') && overlay.includes('.gopt-token-bar.is-syncing'));
+  assert.ok(overlay.includes('html.gopt-latex-heavy .gopt-turn-manual-open'));
+
+  const navSrc = read('src', 'content', 'strip-navigator.js');
+  const colSrc = read('src', 'content', 'collapse-manager.js');
+  const mainSrc = read('src', 'content', 'main.js');
+  assert.ok(navSrc.includes('cachedTextLeft') && navSrc.includes('textLeftDirty') && navSrc.includes('fromScroll'));
+  assert.ok(colSrc.includes('r.bottom <= 0 || r.top >= vh') && colSrc.includes('portaledBtns.has(btn)'));
+  assert.ok(!mainSrc.includes('gopt-has-scroll-bottom'), 'dead gopt-has-scroll-bottom removed');
+  assert.ok(mainSrc.includes('data-gopt-scrolling') && mainSrc.includes('LATEX_HEAVY_THRESHOLD = 50'));
+  assert.ok(mainSrc.includes('gopt-latex-heavy') && mainSrc.includes('scrollBtnPosDirty') && mainSrc.includes('gopt-lite-latex'));
+});
+
 // ---------- syntax ----------
 check('syntax: node --check on every src/**/*.js', () => {
   const files = walk(p('src'), '.js');
-  assert.ok(files.length >= 8, 'expected >= 8 js files, got ' + files.length);
+  assert.ok(files.length >= 9, 'expected >= 9 js files, got ' + files.length);
   for (const f of files) {
     const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
     assert.equal(r.status, 0, path.relative(ROOT, f) + ': ' + r.stderr);

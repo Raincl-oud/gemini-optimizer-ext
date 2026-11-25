@@ -15,7 +15,8 @@
   const DEFAULT_EARLY = Object.freeze({
     autoCollapse: true,
     openPastChats: 4,
-    hideSources: true
+    hideSources: true,
+    liteLatex: false
   });
 
   let coldTimer = 0;
@@ -41,7 +42,8 @@
     return {
       autoCollapse: typeof r.autoCollapse === 'boolean' ? r.autoCollapse : DEFAULT_EARLY.autoCollapse,
       openPastChats: normalizeOpenPast(r.openPastChats),
-      hideSources: typeof r.hideSources === 'boolean' ? r.hideSources : DEFAULT_EARLY.hideSources
+      hideSources: typeof r.hideSources === 'boolean' ? r.hideSources : DEFAULT_EARLY.hideSources,
+      liteLatex: typeof r.liteLatex === 'boolean' ? r.liteLatex : DEFAULT_EARLY.liteLatex
     };
   }
 
@@ -102,6 +104,7 @@
     const html = d.documentElement;
     toggleClass(html, 'gopt-prewrap', css.length > 0);
     toggleClass(html, 'gopt-hide-sources', cfg.hideSources);
+    toggleClass(html, 'gopt-lite-latex', Boolean(cfg && cfg.liteLatex));
     toggleClass(html, 'gopt-light-render', true);
 
     let styleEl = typeof d.getElementById === 'function' ? d.getElementById(PREWRAP_STYLE_ID) : null;

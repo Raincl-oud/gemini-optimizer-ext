@@ -222,7 +222,10 @@
       }
       if (!btn) continue;
       const r = el.getBoundingClientRect();
-      if (r.height === 0) continue;
+      if (r.height === 0 || r.bottom <= 0 || r.top >= vh) {
+        if (portaledBtns.has(btn)) toPark.push([btn, el]);
+        continue;
+      }
 
       const uq = Sel().queryFirst(el, Sel().SEL.userQuery);
       let minTopOffset = 8;
